@@ -1,0 +1,36 @@
+/*
+For general Scribus (>=1.3.2) copyright and licensing information please refer
+to the COPYING file provided with the program. Following this notice may exist
+a copyright and/or license notice that predates the release of Scribus 1.3.2
+for which a new license (GPL+exception) is in place.
+*/
+
+
+#include "scdocoutput.h"
+using namespace std;
+
+bool ScDocOutput::makeOutput(ScribusDoc* doc, const vector<int>& pageNumbers)
+{
+	if (!begin())
+		return false;
+
+	bool done = true;
+	ScPage* page;
+
+	for (size_t index = 0; index < pageNumbers.size(); index++)
+	{
+		page = doc->Pages->at( pageNumbers[index] - 1 );
+		ScPageOutput* outputComponent = createPageOutputComponent(index + 1);
+		if (!outputComponent)
+		{
+			done = false;
+			break;
+		}
+		outputComponent->begin();
+		outputComponent->drawPage(page);
+		outputComponent->end();
+		delete outputComponent;
+	}
+	end();
+	return done;
+}
