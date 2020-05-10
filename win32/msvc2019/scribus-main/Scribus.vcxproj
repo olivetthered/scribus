@@ -23,29 +23,32 @@
     <ProjectGuid>{B17FCD80-7978-4544-93C4-2FE1AC6FE9F3}</ProjectGuid>
     <RootNamespace>scribusmain</RootNamespace>
     <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+    <UseDebugLibraries>true</UseDebugLibraries>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -82,6 +85,7 @@
     <IntDir>..\..\..\..\Scribus-builds\Build-objs\$(Configuration)-$(Platform)-$(PlatformToolset)\$(TargetName)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
     <TargetName>Scribus</TargetName>
+    <ExecutablePath>$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>..\..\..\..\Scribus-builds\Scribus-$(Configuration)-$(Platform)-$(PlatformToolset)\</OutDir>
@@ -150,16 +154,18 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(QT5CORE_LIB);$(QT5GUI_LIB);$(QT5NETWORK_LIB);$(QT5PRINTSUPPORT_LIB);$(QT5WIDGETS_LIB);$(QT5XML_LIB);$(CAIRO_LIB);$(FREETYPE_LIB);$(HARFBUZZ_LIB);$(ICU_LIB);$(LCMS_LIB);$(LIBJPEG_LIB);$(LIBPNG_LIB);$(LIBTIFF_LIB);$(PODOFO_LIB);$(ZLIB_LIB);mscms.lib;WSock32.Lib;scribus-pgf.lib;scribus-wpg.lib;scribus-zip.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(QT5CORE_LIB);$(QT5GUI_LIB);$(QT5NETWORK_LIB);$(QT5PRINTSUPPORT_LIB);$(QT5WIDGETS_LIB);$(QT5XML_LIB);$(CAIRO_LIB);$(FREETYPE_LIB);$(HARFBUZZ_LIB);$(ICU_LIB);$(LCMS_LIB);$(LIBJPEG_LIB);$(LIBPNG_LIB);$(LIBTIFF_LIB);$(PODOFO_LIB);$(ZLIB_LIB);mscms.lib;WSock32.Lib;scribus-pgf.lib;scribus-wpg.lib;scribus-zip.lib;qtmain.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(QT5_DIR)\lib;$(CAIRO_LIB_DIR);$(FREETYPE_LIB_DIR);$(HARFBUZZ_LIB_DIR);$(ICU_LIB_DIR);$(LCMS_LIB_DIR);$(LIBJPEG_LIB_DIR);$(LIBPNG_LIB_DIR);$(LIBTIFF_LIB_DIR);$(PODOFO_LIB_DIR);$(ZLIB_LIB_DIR);$(OutDir).;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AssemblyDebug>
       </AssemblyDebug>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention>
       </DataExecutionPrevention>
       <ImportLibrary>$(OutDir)scribus-api.lib</ImportLibrary>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
