@@ -334,16 +334,19 @@ public:
 	//----- text drawing - text
     void endString(GfxState * /*state*/) override;	
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode /*code*/, int /*nBytes*/, Unicode const* u, int uLen);
-    void beginString(GfxState *state, const GooString* s) override; //or this could bne beginstringop
-	void _flushText();
+    void beginString(GfxState *state, const GooString* s) override; //or this could bne beginstringop	
     void updateTextMat(GfxState *state) override;
+	void _flushText(GfxState* state);
     void updateTextShift(GfxState *state, double shift) override;
 	void updateTextPos(GfxState* state);	
 
 	void _updateFontForText(GfxState *state);
 	QString _bestMatchingFont(QString PDFname);
     void _updateStyle(GfxState *state);	
-#
+
+	//TODO: from the ui, this needs to come from whereever the UI parameters are set.
+	bool import_text_as_vectors;
+
 	//----- text drawing - vectors
 	void  _updateFontForVectors(GfxState* state);
 	void  beginTextObject(GfxState *state) override;
@@ -377,8 +380,7 @@ private:
 	QString UnicodeParsedString(const std::string& s1);
 	bool checkClip();
 
-	//TODO: from the ui, this needs to come from whereever the UI parameters are set.
-	bool _import_text_as_vectors;
+
 
 
 	//text handling

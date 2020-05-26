@@ -201,7 +201,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QRadioButton" name="radioButton_2">
+           <widget class="QRadioButton" name="textAsText">
             <property name="text">
              <string>Import Text As Text</string>
             </property>

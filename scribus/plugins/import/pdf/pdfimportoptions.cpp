@@ -61,6 +61,15 @@ bool PdfImportOptions::croppingEnabled()
 	return ui->cropGroup->isChecked();
 }
 
+bool PdfImportOptions::getImportAsVectors()
+{
+	if (ui->textAsVectors->isChecked())
+		return true;
+	
+	return false;
+}
+
+
 void PdfImportOptions::setUpOptions(const QString& fileName, int actPage, int numPages, bool interact, bool cropPossible, PdfPlug* plug)
 {
 	m_plugin = plug;
@@ -71,6 +80,9 @@ void PdfImportOptions::setUpOptions(const QString& fileName, int actPage, int nu
 	ui->cropGroup->setVisible(cropPossible);
 	ui->cropGroup->setChecked(cropPossible);
 	ui->cropBox->setCurrentIndex(3); // Use CropBox by default
+	ui->textAsVectors->setChecked(true);
+	ui->textAsText->setChecked(false);
+
 	if (interact)
 	{
 		ui->allPages->setChecked(false);

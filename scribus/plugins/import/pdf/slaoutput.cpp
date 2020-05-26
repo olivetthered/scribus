@@ -3330,7 +3330,7 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
  * \brief Flushes the buffered characters
  */
 void SlaOutputDev::updateTextMat(GfxState *state) {
-    _flushText();
+    _flushText(state);
     // Update text matrix
     const double *text_matrix = state->getTextMat();
     double w_scale = sqrt( text_matrix[0] * text_matrix[0] + text_matrix[2] * text_matrix[2] );
@@ -3360,7 +3360,7 @@ void SlaOutputDev::updateTextMat(GfxState *state) {
 /**
  * \brief Writes the buffered characters to the SVG document
  */
-void SlaOutputDev::_flushText() {
+void SlaOutputDev::_flushText(GfxState *state) {
     // Ignore empty strings
     if ( _glyphs.empty()) {
         _glyphs.clear();
@@ -3384,9 +3384,63 @@ void SlaOutputDev::_flushText() {
 	
 		double xCoor = m_doc->currentPage()->xOffset();
 		double yCoor = m_doc->currentPage()->yOffset();
-		double  lineWidth = 0.0;
-		getPenState(&state);
-		int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, state.getTransformedLineWidth(), CurrColorFill /* state.getStrokeColor()  there's also a stroke colour so this needs to be handled better for text */, CommonStrings::None);
+		double  lineWidth = 0.0;		
+		//int z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Rectangle, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
+		int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
+
+
+		//int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
+		PageItem* ite = m_doc->Items->at(z);
+		QTransform mm;
+		mm.scale(1, -1);
+		mm.translate(_text_matrix.m32, -_text_matrix.m33);
+		textPath.map(mm);
+		textPath.map(m_ctm);
+		ite->PoLine = textPath.copy();
+		ite->ClipEdited = true;
+		ite->FrameType = 3;
+		ite->setLineEnd(PLineEnd);
+		ite->setLineJoin(PLineJoin);
+		ite->setTextFlowMode(PageItem::TextFlowDisabled);
+		ite->OwnPage = m_doc->OnPage(ite);
+
+		int textRenderingMode = state->getRender();
+		// Invisible or only used for clipping
+		if (textRenderingMode == 3)
+			return;
+		// Fill text rendering modes. See above
+		if (textRenderingMode == 0 || textRenderingMode == 2 || textRenderingMode == 4 || textRenderingMode == 6)
+		{
+			CurrColorFill = getColor(state->getFillColorSpace(), state->getFillColor(), &CurrFillShade);
+			ite->setFillColor(CurrColorFill);
+			ite->setFillShade(CurrFillShade);
+			ite->setFillEvenOdd(false);
+			ite->setFillTransparency(1.0 - state->getFillOpacity());
+			ite->setFillBlendmode(getBlendMode(state));
+		}
+		// Stroke text rendering modes. See above
+		if (textRenderingMode == 1 || textRenderingMode == 2 || textRenderingMode == 5 || textRenderingMode == 6)
+		{
+			CurrColorStroke = getColor(state->getStrokeColorSpace(), state->getStrokeColor(), &CurrStrokeShade);
+			ite->setLineColor(CurrColorStroke);
+			ite->setLineWidth(state->getTransformedLineWidth());
+			ite->setLineTransparency(1.0 - state->getStrokeOpacity());
+			ite->setLineBlendmode(getBlendMode(state));
+			ite->setLineShade(CurrStrokeShade);
+		}
+		/*
+		m_doc->adjustItemSize(ite);
+		m_Elements->append(ite);
+		if (m_groupStack.count() != 0)
+		{
+			m_groupStack.top().Items.append(ite);
+			applyMask(ite);
+		}
+
+		*/
+		/*****************************/
+
+
 		text_node = m_doc->Items->at(z);		
 
 
@@ -3462,8 +3516,7 @@ void SlaOutputDev::_flushText() {
 				QPainterPath painterPath;
 				painterPath.addText(startX, startY, glyph.style->getFont(), text_buffer);
 				if (!textPath.empty())
-				{
-					finishCmdParsing(text_node);
+				{					
 					//text_node.append(text_node);
 					text_node->PoLine.append(textPath);
 				}
@@ -3528,6 +3581,14 @@ void SlaOutputDev::_flushText() {
         ++i;
     }
     _glyphs.clear();
+
+	m_doc->adjustItemSize(ite);
+	m_Elements->append(ite);
+	if (m_groupStack.count() != 0)
+	{
+		m_groupStack.top().Items.append(ite);
+		applyMask(ite);
+	}
 
 }
 
@@ -3884,7 +3945,7 @@ void SlaOutputDev::drawChar(GfxState *state, double x, double y, double dx, doub
 {
 //	qDebug() << "SlaOutputDev::drawChar code:" << code << "bytes:" << nBytes << "Unicode:" << u << "ulen:" << uLen << "render:" << state->getRender();
 //for importing text as glyphs
-if(_import_text_as_vectors){
+if(import_text_as_vectors){
 	double x1, y1, x2, y2;
 	_updateFontForVectors(state);
 	if (!m_font)
@@ -4073,7 +4134,7 @@ void SlaOutputDev::endTextObject(GfxState *state)
 {
 
 	// for text as glyphs
-	if(_import_text_as_vectors) {
+	if(import_text_as_vectors) {
 	//	qDebug() << "SlaOutputDev::endTextObject";
 		if (!m_clipTextPath.isEmpty())
 		{
@@ -4117,7 +4178,7 @@ void SlaOutputDev::endTextObject(GfxState *state)
 		}
 	}else {
 	// for importing text as text
-		_flushText();
+		_flushText(state);
 		// TODO: clip if render_mode >= 4
 		_in_text_object = false;
 	}
