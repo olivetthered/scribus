@@ -120,6 +120,70 @@ private:
 };
 
 
+class PdfFont
+{
+public:
+	void Apply(ScribusDoc& p);
+	int    charset;
+	QFont  font;
+	double rotation;
+	PdfFont() { charset = 1; rotation = 0.0; }
+};
+
+class PdfGlyphStyle {
+protected:
+	QFont font;
+	bool  fill;
+	bool stroke;
+public:
+	void setFont(QFont font)
+	{
+		this->font = font;
+	}
+	QFont getFont()
+	{
+		return this->font;
+	}
+	void setFill(bool fill)
+	{
+		this->fill = fill;
+	}
+	void setStroke(bool stroke)
+	{
+		this->stroke = stroke;
+	}
+	QString toString(void)
+	{
+		QTextStream result;
+		result  << "fill=" << fill << ":stroke=" << stroke << ":font=" << font.toString());
+		result.flush();
+		return *result.string();
+	}
+
+	
+};
+
+/*
+* Holds all the dtails for each glyph in the text imported from the pdf file.
+*
+*/
+struct PdfGlyph {
+	QPoint position;    // Absolute glyph coords
+	QPoint text_position; // Absolute glyph coords in text space
+	double dx;  // X advance value
+	double dy;  // Y advance value
+	double rise;    // Text rise parameter
+	QChar code;   // UTF-16 coded character but we only store and use UTF-8, the slternstive is const char * for utf8 so far as qt is concerned
+	bool is_space;
+
+	bool style_changed;  // Set to true if style has to be reset
+	PdfGlyphStyle* style;
+	int render_mode;    // Text render mode
+	QString font_specification;   // Pointer to current font specification
+
+};
+
+
 class AnoOutputDev : public OutputDev
 {
 public:
@@ -264,7 +328,24 @@ public:
 	void updateStrokeColor(GfxState *state) override;
 	void updateFont(GfxState *state) override;
 
-	//----- text drawing
+	void  updateFont(GfxState* state) override;
+
+
+	//----- text drawing - text
+    void endString(GfxState * /*state*/) override;	
+	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode /*code*/, int /*nBytes*/, Unicode const* u, int uLen);
+    void beginString(GfxState *state, const GooString* s) override; //or this could bne beginstringop
+	void _flushText();
+    void updateTextMat(GfxState *state) override;
+    void updateTextShift(GfxState *state, double shift) override;
+	void updateTextPos(GfxState* state);	
+
+	void _updateFontForText(GfxState *state);
+	QString _bestMatchingFont(QString PDFname);
+    void _updateStyle(GfxState *state);	
+#
+	//----- text drawing - vectors
+	void  _updateFontForVectors(GfxState* state);
 	void  beginTextObject(GfxState *state) override;
 	void  endTextObject(GfxState *state) override;
 	void  drawChar(GfxState *state, double /*x*/, double /*y*/, double /*dx*/, double /*dy*/, double /*originX*/, double /*originY*/, CharCode /*code*/, int /*nBytes*/, POPPLER_CONST_082 Unicode * /*u*/, int /*uLen*/) override;
@@ -295,6 +376,22 @@ private:
 	QString UnicodeParsedString(POPPLER_CONST GooString *s1);
 	QString UnicodeParsedString(const std::string& s1);
 	bool checkClip();
+
+	//TODO: from the ui, this needs to come from whereever the UI parameters are set.
+	bool _import_text_as_vectors;
+
+
+	//text handling
+	bool _in_text_object;
+	bool _invalidated_style;
+	QStringList _availableFontNames;
+	bool _need_font_update;
+	PdfFont _font_style;          // Current font style	
+	QFont  _current_font; 
+	double _font_scaling;
+	QPoint _text_position;
+	QTransform _text_matrix;
+	std::vector<PdfGlyph> _glyphs; //this may replace some of the other settings or it may not, certainly not font as text gets flushed if the font changes
 
 	// Intersect the current clip path with the new path in state where filled areas
 	// are interpreted according to fillRule.
