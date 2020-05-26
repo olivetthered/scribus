@@ -155,7 +155,7 @@ public:
 	QString toString(void)
 	{
 		QTextStream result;
-		result  << "fill=" << fill << ":stroke=" << stroke << ":font=" << font.toString());
+		result  << "fill=" << fill << ":stroke=" << stroke << ":font=" << font.toString();
 		result.flush();
 		return *result.string();
 	}
@@ -173,7 +173,7 @@ struct PdfGlyph {
 	double dx;  // X advance value
 	double dy;  // Y advance value
 	double rise;    // Text rise parameter
-	QChar code;   // UTF-16 coded character but we only store and use UTF-8, the slternstive is const char * for utf8 so far as qt is concerned
+	QString code;   // UTF-16 coded character but we only store and use UTF-8, the slternstive is const char * for utf8 so far as qt is concerned
 	bool is_space;
 
 	bool style_changed;  // Set to true if style has to be reset
@@ -327,9 +327,6 @@ public:
 	void updateFillColor(GfxState *state) override;
 	void updateStrokeColor(GfxState *state) override;
 	void updateFont(GfxState *state) override;
-
-	void  updateFont(GfxState* state) override;
-
 
 	//----- text drawing - text
     void endString(GfxState * /*state*/) override;	

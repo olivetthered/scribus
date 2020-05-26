@@ -474,6 +474,7 @@ bool PdfPlug::convert(const QString& fn)
 				SlaOutputDev *dev = new SlaOutputDev(m_Doc, &Elements, &importedColors, importerFlags);
 				if (dev->isOk())
 				{
+					dev->import_text_as_vectors = importTextAsVectors;
 					OCGs* ocg = pdfDoc->getOptContentConfig();
 					if (ocg)
 					{
@@ -562,7 +563,7 @@ bool PdfPlug::convert(const QString& fn)
 						}
 					}
 
-					dev->import_text_as_vectors = importTextAsVectors;
+					
 
 					const int zeroRotate = 0;
 					dev->startDoc(pdfDoc, pdfDoc->getXRef(), pdfDoc->getCatalog());
