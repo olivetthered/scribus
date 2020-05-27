@@ -1,3 +1,9 @@
 build/
 
 .svn
+*.db
+win32/msvc2019/.vs/Scribus/v16/.suo
+*.opendb
+*.ipch
+*.db-shm
+*.db-wal
