@@ -3580,7 +3580,6 @@ void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node,
  */
 void SlaOutputDev::updateTextMat(GfxState *state) {
 	qDebug() << "updateTextMat()";
-    _flushText(state);
     // Update text matrix
     const double *text_matrix = state->getTextMat();
     double w_scale = sqrt( text_matrix[0] * text_matrix[0] + text_matrix[2] * text_matrix[2] );
@@ -3603,8 +3602,14 @@ void SlaOutputDev::updateTextMat(GfxState *state) {
             new_text_matrix.scale(1.0 / max_scale, 1.0 / max_scale); //this may need to be byx or by y
         }
     }
-    _text_matrix = new_text_matrix;
-    _font_scaling = max_scale;
+	/* only call _flushText if things have actually changed */
+	if (_text_matrix != new_text_matrix || _font_scaling != max_scale)
+	{
+		_flushText(state);
+		_text_matrix = new_text_matrix;
+		_font_scaling = max_scale;
+	}
+
 }
 
 void SlaOutputDev::_setFillAndStrokeForPdf(GfxState* state, PageItem* text_node) {
@@ -3624,7 +3629,7 @@ void SlaOutputDev::_setFillAndStrokeForPdf(GfxState* state, PageItem* text_node)
 	{
 
 		CurrColorFill = getColor(state->getFillColorSpace(), state->getFillColor(), &CurrFillShade);
-		text_node->setFillColor("none");// CurrColorFill);
+		text_node->setFillColor(CurrColorFill);
 		text_node->setFillShade(CurrFillShade);
 		text_node->setFillEvenOdd(false);
 		text_node->setFillTransparency(1.0 - state->getFillOpacity());
@@ -3662,60 +3667,23 @@ void SlaOutputDev::_flushText(GfxState *state) {
         return;
     }
 
-	PageItem* text_node;
-
-
-
 	//QString textColor = importColor(first_glyph.);
-	FPointArray textPath;
+	qreal xCoor = /* m_doc->currentPage()->xOffset() + */ (double)first_glyph.text_position.x();
+	qreal yCoor = m_doc->currentPage()->initialHeight() - (/*m_doc->currentPage()->yOffset() + */(double)first_glyph.text_position.y()); // don't know if y is top down or bottom up
+	double  lineWidth = 0.0;
+	/* colours don't get reset to CommonStrings::None often enough.*/
+	int z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Rectangle, xCoor, yCoor, 40, 40, 0, CommonStrings::None/* this->CurrColorFill */, CommonStrings::None /* this->CurrColorStroke*/);//, PageItem::ItemKind::InlineItem);
+	//int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
 
-		double xCoor = m_doc->currentPage()->xOffset();
-		double yCoor = m_doc->currentPage()->yOffset();
-		double  lineWidth = 0.0;
-		int z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Rectangle, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
-		//int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
 
+	//int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
+	PageItem* text_node = m_doc->Items->at(z);
+	//ObjStyle tmpObjStyle;
+	ParagraphStyle pStyle;
+	CharStyle cStyle;
+	finishItem(text_node,pStyle, cStyle);
+	_setFillAndStrokeForPdf(state, text_node);
 
-		//int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
-		PageItem* ite = m_doc->Items->at(z);
-		QTransform mm;
-		mm.scale(1, -1);
-		mm.translate(_text_matrix.m32(), -_text_matrix.m33());
-		textPath.map(mm);
-		textPath.map(m_ctm);
-		ite->PoLine = textPath.copy();
-
-		ite->ClipEdited = true;
-		ite->FrameType = 3;
-		ite->setLineEnd(PLineEnd);
-		ite->setLineJoin(PLineJoin);
-		ite->setTextFlowMode(PageItem::TextFlowDisabled);
-		ite->OwnPage = m_doc->OnPage(ite);
-
-		int textRenderingMode = state->getRender();
-		// Invisible or only used for clipping
-		if (textRenderingMode == 3)
-			return;
-		// Fill text rendering modes. See above
-		if (textRenderingMode == 0 || textRenderingMode == 2 || textRenderingMode == 4 || textRenderingMode == 6)
-		{
-			CurrColorFill = getColor(state->getFillColorSpace(), state->getFillColor(), &CurrFillShade);
-			ite->setFillColor(CurrColorFill);
-			ite->setFillShade(CurrFillShade);
-			ite->setFillEvenOdd(false);
-			ite->setFillTransparency(1.0 - state->getFillOpacity());
-			ite->setFillBlendmode(getBlendMode(state));
-		}
-		// Stroke text rendering modes. See above
-		if (textRenderingMode == 1 || textRenderingMode == 2 || textRenderingMode == 5 || textRenderingMode == 6)
-		{
-			CurrColorStroke = getColor(state->getStrokeColorSpace(), state->getStrokeColor(), &CurrStrokeShade);
-			ite->setLineColor(CurrColorStroke);
-			ite->setLineWidth(state->getTransformedLineWidth());
-			ite->setLineTransparency(1.0 - state->getStrokeOpacity());
-			ite->setLineBlendmode(getBlendMode(state));
-			ite->setLineShade(CurrStrokeShade);
-		}
 		/*
 		m_doc->adjustItemSize(ite);
 		m_Elements->append(ite);
@@ -3731,8 +3699,8 @@ void SlaOutputDev::_flushText(GfxState *state) {
 
 		text_node = m_doc->Items->at(z);
 
-		m_doc->adjustItemSize(ite);
-		m_Elements->append(ite);
+		m_doc->adjustItemSize(text_node);
+		m_Elements->append(text_node);
 
     // Set text matrix... This need to be done so that the globaal world view that we rite out glyphs to is transformed correctly by the context matrix for each glyph, possibly anyhow.
     QTransform text_transform(_text_matrix);
@@ -3808,24 +3776,17 @@ void SlaOutputDev::_flushText(GfxState *state) {
 				double startX = x_coords[0];
 				double startY = y_coords[0];
 				qDebug() << "tspan content: " <<  text_buffer;
-				ite->itemText.insertChars(text_buffer);
-				ite->itemText.trim();
-				ite->update(); //don't knoww which one if either i need to get it to redraw.
-				ite->updateClip();
+				text_node->itemText.insertChars(text_buffer);
+				text_node->itemText.trim();
+				text_node->update(); //don't knoww which one if either i need to get it to redraw.
+				//ite->updateClip();
 				/*
                 if ( glyphs_in_a_row > 1 ) {
                     tspan_node->setAttribute("sodipodi:role", "line");
                 }
 				*/
                 // Add text content node to tspan
-                //Inkscape::XML::Node *text_content = _xml_doc->createTextNode(text_buffer.c_str());
-				QPainterPath painterPath;
-				painterPath.addText(startX, startY, glyph.style->getFont(), text_buffer);
-				if (!textPath.empty())
-				{
-					//text_node.append(text_node);
-					text_node->PoLine.append(textPath);
-				}
+                //Inkscape::XML::Node *text_content = _xml_doc->createTextNode(text_buffer.c_str());				
                 // Clear temporary buffers
                 x_coords.clear();
                 y_coords.clear();
@@ -3884,11 +3845,12 @@ void SlaOutputDev::_flushText(GfxState *state) {
         ++i;
     }
     _glyphs.clear();
-
+	m_doc->Items->removeLast();
+	m_Elements->append(text_node);
 	if (m_groupStack.count() != 0)
 	{
-		m_groupStack.top().Items.append(ite);
-		applyMask(ite);
+		m_groupStack.top().Items.append(text_node);
+		applyMask(text_node);
 	}
 
 }
