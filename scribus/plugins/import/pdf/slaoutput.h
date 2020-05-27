@@ -168,8 +168,8 @@ public:
 *
 */
 struct PdfGlyph {
-	QPoint position;    // Absolute glyph coords
-	QPoint text_position; // Absolute glyph coords in text space
+	QPointF position;    // Absolute glyph coords
+	QPointF text_position; // Absolute glyph coords in text space
 	double dx;  // X advance value
 	double dy;  // Y advance value
 	double rise;    // Text rise parameter
@@ -327,7 +327,7 @@ public:
 	void updateFillColor(GfxState *state) override;
 	void updateStrokeColor(GfxState *state) override;
 	void updateFont(GfxState *state) override;
-
+	void _setFillAndStrokeForPdf(GfxState* state, PageItem* text_node);
 	//----- text drawing - text
     void endString(GfxState * /*state*/) override;	
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode /*code*/, int /*nBytes*/, Unicode const* u, int uLen);
@@ -335,7 +335,9 @@ public:
     void updateTextMat(GfxState *state) override;
 	void _flushText(GfxState* state);
     void updateTextShift(GfxState *state, double shift) override;
-	void updateTextPos(GfxState* state);	
+	void updateTextPos(GfxState* state);
+	void finishItem(PageItem* item, ParagraphStyle& pStyle, CharStyle& cStyle);
+	void parseText(std::vector<PdfGlyph>& glyphs, PageItem* item, ParagraphStyle& pStyle, CharStyle& cStyle);
 
 	void _updateFontForText(GfxState *state);
 	QString _bestMatchingFont(QString PDFname);
