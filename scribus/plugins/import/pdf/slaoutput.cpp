@@ -930,6 +930,41 @@ bool SlaOutputDev::handleWidgetAnnot(Annot* annota, double xCoor, double yCoor, 
 	return retVal;
 }
 
+void SlaOutputDev::applyTextStyleToCharStyle(CharStyle &cStyle, const QString& fontName, const QString& textColor, double fontSize)
+{
+	CharStyle newStyle;
+	newStyle.setFillColor(textColor);
+	newStyle.setFontSize(fontSize * 10);
+	if (!fontName.isEmpty())
+	{
+		SCFontsIterator it(*m_doc->AllFonts);
+		for (; it.hasNext(); it.next())
+		{
+			ScFace& face(it.current());
+			if ((face.psName() == fontName) && (face.usable()) && (face.type() == ScFace::TTF))
+			{
+				newStyle.setFont(face);
+				break;
+			}
+			if ((face.family() == fontName) && (face.usable()) && (face.type() == ScFace::TTF))
+			{
+				newStyle.setFont(face);
+				break;
+			}
+			if ((face.scName() == fontName) && (face.usable()) && (face.type() == ScFace::TTF))
+			{
+				newStyle.setFont(face);
+				break;
+			}
+		}
+	}
+	//ParagraphStyle dstyle(ite->itemText.defaultStyle());
+	cStyle.applyCharStyle(newStyle);
+	//ite->itemText.setDefaultStyle(dstyle);
+	//ite->itemText.applyCharStyle(0, ite->itemText.length(), newStyle);
+	//ite->invalid = true;
+}
+
 void SlaOutputDev::applyTextStyle(PageItem* ite, const QString& fontName, const QString& textColor, double fontSize)
 {
 	CharStyle newStyle;
@@ -3047,7 +3082,7 @@ void SlaOutputDev::_updateStyle(GfxState *state) {
 	qDebug() << "_updateStyle()";
     //if (_in_text_object) {
     _invalidated_style = true;
-	_need_font_update = true;
+	//_need_font_update = true;
     //}
 }
 
@@ -3152,9 +3187,9 @@ void SlaOutputDev::updateFont(GfxState* state) {
 void SlaOutputDev::_updateFontForText(GfxState *state) {
 
 	qDebug() << "updateFontForText() TEST";
-    _need_font_update = false;
+    
 	updateTextMat(state);    // Ensure that we have a text matrix built
-
+	_need_font_update = false;
     //if (_font_style) {
         //sp_repr_css_attr_unref(_font_style);
     //}
@@ -3352,7 +3387,7 @@ void SlaOutputDev::_updateFontForText(GfxState *state) {
 void SlaOutputDev::updateTextShift(GfxState *state, double shift) {
 	qDebug() << "updateTextShift()";
 	//_need_font_update = true;
-    double shift_value = -shift * 0.001 * fabs(state->getFontSize());
+    double shift_value = -shift * 0.001 * fabs(state->getFontSize() * _font_scaling);
     if (state->getFont()->getWMode()) {
         _text_position.setY(_text_position.y() + shift_value);
     } else {
@@ -3367,11 +3402,16 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 	qDebug() << "updateTextPos()";
 	//_need_font_update = true;
     QPoint new_position = QPoint(state->getCurX(), state->getCurY());
+
+	QPoint d = QPoint(abs(_text_position.x() - new_position.x()), new_position.y() - _text_position.y());
     _text_position = new_position;
+	if (_in_text_object && d.x() > 10 && d.y() > 10) {
+		_flushText(state);
+	}
 }
 
 /*code mostly taken from importodg.cpp which also supports some line styles and more fill options etc...*/
-void SlaOutputDev::finishItem(PageItem* item, GfxState* state, ParagraphStyle& pStyle, CharStyle& cStyle) {
+void SlaOutputDev::finishItem(PageItem* item, GfxState* state) {
 	item->ClipEdited = true;
 	item->FrameType = 3;
 	
@@ -3395,7 +3435,7 @@ void SlaOutputDev::finishItem(PageItem* item, GfxState* state, ParagraphStyle& p
 
 
 
-void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node, ParagraphStyle& pStyle, CharStyle& cStyle) {
+void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node, ParagraphStyle& pStyle) {
 
 	// Set text matrix... This need to be done so that the globaal world view that we rite out glyphs to is transformed correctly by the context matrix for each glyph, possibly anyhow.
    /***********************
@@ -3448,15 +3488,16 @@ void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node,
 		// Check if we need to make a new tspan
 		if (glyph.style_changed) {
 			qDebug() << "PdfGlyph style changed";
-			new_tspan = true;
+			// we need to set a flag of sorts when the style changes but it shouldn't interrupt us from building our lines
+			//new_tspan = true;
 			// we don't actually need a new line if this happens
 		}
 		else if (i != glyphs.begin()) {
 			const PdfGlyph& prev_glyph = (*prev_iterator);
 			if (!((//glyph.dy == 0.0 && prev_glyph.dy == 0.0 &&
-				glyph.text_position.y() == prev_glyph.text_position.y()) ||
+				glyph.position.y() == prev_glyph.position.y()) ||
 				(//glyph.dx == 0.0 && prev_glyph.dx == 0.0 &&
-					glyph.text_position.x() == prev_glyph.text_position.x()))) {
+					glyph.position.x() == prev_glyph.position.x()))) {
 				qDebug() << "xypos changed y1:" << prev_glyph.text_position.y() << " y2:" << glyph.text_position.y() << " x1:" << prev_glyph.text_position.x() << " x2:" << glyph.text_position.x();
 				new_tspan = true;
 			}
@@ -3487,7 +3528,7 @@ void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node,
 				//m_doc->FrameItems[0]
 				//text_node->itemText.trim();
 				//text_node->setWidth(glyph.dx + glyph.text_position.x() - first_glyph.text_position.x());
-				double currentWidth = glyph.dx + glyph.text_position.x() - globalOrigin.x();
+				double currentWidth = 14 + glyph.dx + glyph.position.x() - globalOrigin.x();
 				if (currentWidth > max_x_y.x())
 				{
 					max_x_y.setX(currentWidth);
@@ -3497,7 +3538,9 @@ void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node,
 				
 								
 				// it seems dy is always 0 and the font info doesn't contain any height pascing info, y figures are also negative
-				double currentHeight = ((glyph.style->getFont().pixelSize() == -1) ? glyph.style->getFont().pointSizeF() : glyph.style->getFont().pixelSize()) - (glyph.text_position.y() - globalOrigin.y());
+				glyph.style->getFont().letterSpacing();
+				glyph.style->getFont().wordSpacing();
+				double currentHeight = 2 + ((glyph.style->getFont().pixelSize() == -1) ? glyph.style->getFont().pointSizeF() + 5 : glyph.style->getFont().pixelSize()) - (glyph.position.y() - globalOrigin.y());
 
 				if (currentHeight > max_x_y.y())
 				{
@@ -3630,11 +3673,13 @@ void SlaOutputDev::updateTextMat(GfxState *state) {
 	{
 		// I think we can change the charStyle mid text stream to account for scaling, so instead of calling _flushText we should maked a call to set cStyle
 		// I'm leaving this in here to test grouping
-		_flushText(state);
+		//_flushText(state);
 		_text_matrix = new_text_matrix;
 		_font_scaling = max_scale;
+		_need_font_update = true;
+		_last_font_specification = "invalid";
 	}
-
+	
 }
 
 void SlaOutputDev::_setFillAndStrokeForPdf(GfxState* state, PageItem* text_node) {
@@ -3727,9 +3772,18 @@ void SlaOutputDev::_flushText(GfxState *state) {
 	//int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
 	PageItem* text_node = m_doc->Items->at(z);
 	//ObjStyle tmpObjStyle;
-	ParagraphStyle pStyle;
-	CharStyle cStyle;
-	finishItem(text_node,state, pStyle, cStyle);
+	
+	ParagraphStyle& pStyle = (ParagraphStyle&)text_node->itemText.defaultStyle();
+	// set some hackish parameters up at first, line spacing can be calculated from the cursor position changes
+	pStyle.setLineSpacingMode(pStyle.AutomaticLineSpacing);
+	pStyle.setHyphenationMode(pStyle.AutomaticHyphenation);
+	
+	
+	//ScFace::ScFaceData sfd = ScFace::ScFaceData();	
+	//ScFace font = ScFace();
+	
+	
+	finishItem(text_node,state);
 	_setFillAndStrokeForPdf(state, text_node);
 
 		
@@ -3744,10 +3798,21 @@ void SlaOutputDev::_flushText(GfxState *state) {
     text_node->setAttribute("transform", transform);
     g_free(transform);
 	*/
-	parseText(_glyphs, text_node, pStyle, cStyle);
+/*set the default charstyle to the style of the glyph, this needss fleshing out a little */
+	
 	int shade = 100;
 	QString CurrColorText = getColor(state->getFillColorSpace(), state->getFillColor(), &shade);
-	applyTextStyle(text_node, first_glyph.style->getFont().family(), CurrColorText, first_glyph.style->getFont().pointSizeF());// *_font_scaling);
+	applyTextStyleToCharStyle(pStyle.charStyle(), _glyphs[0].style->getFont().family(), CurrColorText, _glyphs[0].style->getFont().pointSizeF());// *_font_scaling);
+	text_node->invalid = true;
+	CharStyle& cStyle = (CharStyle&)pStyle.charStyle();
+	cStyle.setScaleH(1000.0);	
+	cStyle.setScaleV(1000.0);
+	cStyle.setHyphenChar(SpecialChars::BLANK.unicode());
+	
+	//text_node->itemText.setDefaultStyle(pStyle);
+	//ParagraphStyle pStyle;
+	parseText(_glyphs, text_node, pStyle);
+	// this needs to be applied to the charstyle of the default pstyle
 	text_node->itemText.insertChars(SpecialChars::PARSEP, true);
 
 	FPointArray boundingBoxShape;
@@ -3910,10 +3975,10 @@ void SlaOutputDev::addChar(GfxState *state, double x, double y,
 void SlaOutputDev::beginString(GfxState* state, const GooString* s)
 {
 	qDebug() << "beginString()" << s;
-	if (_need_font_update) {
-		_updateFontForVectors(state); //this sets m_font a splashfont
-		_updateFontForText(state); //and this sets font_style and has a lkot more detail about the font, both work on the same details from gfxfont
-	}
+	//if (_need_font_update) {
+	_updateFontForVectors(state); //this sets m_font a splashfont
+	_updateFontForText(state); //and this sets font_style and has a lkot more detail about the font, both work on the same details from gfxfont
+	//}
 	if (auto m = state->getTextMat()) {
 		qDebug() << "tm:" << m[0] << "," << m[1] << "," << m[2] << "," << m[3] << "," << m[4] << "," << m[5];
 	}
