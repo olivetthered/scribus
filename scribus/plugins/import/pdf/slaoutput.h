@@ -183,6 +183,27 @@ struct PdfGlyph {
 
 };
 
+class TextRegionLine
+{
+public:
+	qreal maxHeight = -1;
+	qreal modeHeigth = -1;
+	qreal width = -1;
+	QPointF baseOrigin = QPointF(-1, -1);		
+	std::vector<TextRegionLine> segments = std::vector<TextRegionLine>();
+
+};
+
+class TextRegion {
+public:
+	QPointF textRegioBasenOrigin = QPointF(-1, -1);
+	qreal maxHeight = -1;
+	qreal modeHeigth = -1;
+	std::vector<TextRegionLine> textRegionLines = std::vector<TextRegionLine>();
+	qreal maxWidth = -1;
+	QPointF _lineBaseXY = QPointF(-1, -1); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
+	QPointF _lastXY = QPointF(-1, -1);
+};
 
 class AnoOutputDev : public OutputDev
 {
@@ -336,6 +357,14 @@ public:
     void updateTextMat(GfxState *state) override;
 	void _flushText(GfxState* state);
     void updateTextShift(GfxState *state, double shift) override;
+	static bool _coLinera(qreal a, qreal b);
+	bool _closeToX(qreal x1, qreal x2);
+	bool _closeToY(qreal y1, qreal y2);
+	bool _adjunctLesser(qreal testY, qreal lastY, qreal baseY);
+	bool _adjunctGreater(qreal testY, qreal lastY, qreal baseY);
+	bool _linearTest(QPointF point, bool xInLimits, bool yInLimits);
+	void _moveToPoint(QPointF newPoint);
+	void _addGlyphAtPoint(QPointF newGlyphPoint);
 	void updateTextPos(GfxState* state);
 	void finishItem(PageItem* item, GfxState* state);	
 	void parseText(std::vector<PdfGlyph>& glyphs, PageItem* item, ParagraphStyle& pStyle);
@@ -392,10 +421,11 @@ private:
 	PdfFont _font_style;          // Current font style	
 	QFont  _current_font; 
 	double _font_scaling;
-	QPoint _text_position;
+	QPointF _text_position;
 	QTransform _text_matrix;
 	std::vector<PdfGlyph> _glyphs; //this may replace some of the other settings or it may not, certainly not font as text gets flushed if the font changes
 
+	TextRegion *m_activeTextRegion = NULL;
 	// Intersect the current clip path with the new path in state where filled areas
 	// are interpreted according to fillRule.
 	void adjustClip(GfxState *state, Qt::FillRule fillRule);
