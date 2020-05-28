@@ -3354,7 +3354,7 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 }
 
 /*code mostly taken from importodg.cpp which also supports some line styles and more fill options etc...*/
-void SlaOutputDev::finishItem(PageItem* item, ParagraphStyle& pStyle, CharStyle& cStyle) {
+void SlaOutputDev::finishItem(PageItem* item, GfxState* state, ParagraphStyle& pStyle, CharStyle& cStyle) {
 	item->ClipEdited = true;
 	item->FrameType = 3;
 	
@@ -3367,10 +3367,10 @@ void SlaOutputDev::finishItem(PageItem* item, ParagraphStyle& pStyle, CharStyle&
 	item->OldH2 = item->height();
 	item->updateClip();
 	item->OwnPage = m_doc->OnPage(item);
-#if 0
-	item->setFillTransparency(1.0 - obState.fillOpacity);
-	item->setLineTransparency(1.0 - obState.strokeOpacity);
-#endif
+
+	//item->setFillTransparency(1.0 - state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity());
+	//item->setLineTransparency(1.0);
+
 	item->setStartArrowIndex(0);
 	item->setEndArrowIndex(0);
 }
@@ -3435,9 +3435,9 @@ void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node,
 		}
 		else if (i != glyphs.begin()) {
 			const PdfGlyph& prev_glyph = (*prev_iterator);
-			if (!((glyph.dy == 0.0 && prev_glyph.dy == 0.0 &&
+			if (!((//glyph.dy == 0.0 && prev_glyph.dy == 0.0 &&
 				glyph.text_position.y() == prev_glyph.text_position.y()) ||
-				(glyph.dx == 0.0 && prev_glyph.dx == 0.0 &&
+				(//glyph.dx == 0.0 && prev_glyph.dx == 0.0 &&
 					glyph.text_position.x() == prev_glyph.text_position.x()))) {
 				new_tspan = true;
 			}
@@ -3445,7 +3445,7 @@ void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node,
 
 		// Create tspan node if needed
 		if (new_tspan || i == glyphs.end() - 1) {
-			if (btspan_node) {
+			if (btspan_node || i == glyphs.end() - 1) {
 				// Set the x and y coordinate arrays
 
 
@@ -3467,15 +3467,14 @@ void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node,
 				text_node->itemText.insertChars(text_buffer, true);
 				//text_node->itemText.trim();
 				//text_node->setWidth(glyph.dx + glyph.text_position.x() - first_glyph.text_position.x());
-
 				double currentWidth = glyph.dx + glyph.text_position.x() - globalOrigin.x();
 				if (currentWidth > max_x_y.x())
 				{
 					max_x_y.setX(currentWidth);
 				}
-
+				qDebug() << "font : " << glyph.style->getFont().toString();
 				// it seems dy is always 0 and the font info doesn't contain any height pascing info, y figures are also negative
-				double currentHeight = glyph.style->getFont().pixelSize() -( glyph.text_position.y() - globalOrigin.y());
+				double currentHeight = ((glyph.style->getFont().pixelSize() == -1) ? glyph.style->getFont().pointSizeF() : glyph.style->getFont().pixelSize()) - (glyph.text_position.y() - globalOrigin.y());
 
 				if (currentHeight > max_x_y.y())
 				{
@@ -3520,7 +3519,7 @@ void SlaOutputDev::parseText(std::vector<PdfGlyph>& glyphs, PageItem* text_node,
 			}
 			if (i == _glyphs.end() - 1) {
 				//sp_repr_css_attr_unref((*prev_iterator).style);
-				text_node->setWidthHeight(max_x_y.x(), max_x_y.y());
+				text_node->setWidthHeight(max_x_y.x() + 2.0, max_x_y.y() + 2.0);
 				break;
 			}
 			else {
@@ -3590,6 +3589,7 @@ void SlaOutputDev::updateTextMat(GfxState *state) {
     } else {
         max_scale = h_scale;
     }
+	//TODO: fix this it looks absoulutly screwed up and needs using in the code too
     // Calculate new text matrix
 	QTransform new_text_matrix =  QTransform(text_matrix[0] * state->getHorizScaling(),
                                text_matrix[1] * state->getHorizScaling(),
@@ -3598,13 +3598,15 @@ void SlaOutputDev::updateTextMat(GfxState *state) {
 
     if (!qFuzzyCompare(fabs( max_scale), 1.0))  {
         // Cancel out scaling by font size in text matrix
-        for ( int i = 0 ; i < 4 ; i++ ) {
+        //for ( int i = 0 ; i < 4 ; i++ ) {
             new_text_matrix.scale(1.0 / max_scale, 1.0 / max_scale); //this may need to be byx or by y
-        }
+        //}
     }
 	/* only call _flushText if things have actually changed */
 	if (_text_matrix != new_text_matrix || _font_scaling != max_scale)
 	{
+		// I think we can change the charStyle mid text stream to account for scaling, so instead of calling _flushText we should maked a call to set cStyle
+		// I'm leaving this in here to test grouping
 		_flushText(state);
 		_text_matrix = new_text_matrix;
 		_font_scaling = max_scale;
@@ -3629,22 +3631,45 @@ void SlaOutputDev::_setFillAndStrokeForPdf(GfxState* state, PageItem* text_node)
 	{
 
 		CurrColorFill = getColor(state->getFillColorSpace(), state->getFillColor(), &CurrFillShade);
-		text_node->setFillColor(CurrColorFill);
-		text_node->setFillShade(CurrFillShade);
-		text_node->setFillEvenOdd(false);
-		text_node->setFillTransparency(1.0 - state->getFillOpacity());
-		text_node->setFillBlendmode(getBlendMode(state));
-
+		if (text_node->isTextFrame()) { //fil;l colour sets the background colour for the frame not the fill colour fore  the text
+			//text_node->setFillColor("none");
+			text_node->setFillTransparency(1.0 - (state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity()));
+			text_node->setLineTransparency(1.0); // this ssets the transparency of the textbox border and we don't want to see it			
+			text_node->setFillColor(CommonStrings::None);
+			text_node->setLineColor(CommonStrings::None);
+			text_node->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
+			text_node->setFillShade(CurrFillShade);
+		}
+		else {
+			text_node->setFillColor(CurrColorFill);
+			text_node->setFillShade(CurrFillShade);
+			text_node->setFillEvenOdd(false);
+			text_node->setFillTransparency(1.0 - state->getFillOpacity());
+			text_node->setFillBlendmode(getBlendMode(state));
+		}
 	}
 	// Stroke text rendering modes. See above
 	if (textRenderingMode == 1 || textRenderingMode == 2 || textRenderingMode == 5 || textRenderingMode == 6)
 	{
 		CurrColorStroke = getColor(state->getStrokeColorSpace(), state->getStrokeColor(), &CurrStrokeShade);
-		text_node->setLineColor(CurrColorStroke);
-		text_node->setLineWidth(state->getTransformedLineWidth());
-		text_node->setLineTransparency(1.0 - state->getStrokeOpacity());
-		text_node->setLineBlendmode(getBlendMode(state));
-		text_node->setLineShade(CurrStrokeShade);
+		if (text_node->isTextFrame()) { //fil;l colour sets the background colour for the frame not the fill colour fore  the text
+			//text_node->setFillColor("none");
+			text_node->setFillTransparency(1.0 - (state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity()));
+			text_node->setLineTransparency(1.0); // this ssets the transparency of the textbox border and we don't want to see it			
+			text_node->setFillColor(CommonStrings::None); //TODO: Check if we ov erride the stroke colour with the fil,l colour when threre is a choice
+			text_node->setLineColor(CommonStrings::None);
+			text_node->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
+			text_node->setFillBlendmode(getBlendMode(state));
+			text_node->setFillShade(CurrFillShade);
+		}
+		else {			
+			text_node->setLineColor(CurrColorStroke);
+			text_node->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
+			text_node->setFillTransparency(1.0 - state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity());
+			text_node->setLineTransparency(1.0); // this ssets the transparency of the textbox border and we don't want to see it
+			text_node->setLineBlendmode(getBlendMode(state));
+			text_node->setLineShade(CurrStrokeShade);
+		}
 	}
 }
 
@@ -3652,7 +3677,7 @@ void SlaOutputDev::_setFillAndStrokeForPdf(GfxState* state, PageItem* text_node)
  * \brief Writes the buffered characters to the SVG document
  */
 void SlaOutputDev::_flushText(GfxState *state) {
-	qDebug() << "_flushText()";
+	qDebug() << "_flushText()    m_doc->currentPage()->xOffset():" << m_doc->currentPage()->xOffset();
     // Ignore empty strings
     if ( _glyphs.empty()) {
         _glyphs.clear();
@@ -3668,11 +3693,11 @@ void SlaOutputDev::_flushText(GfxState *state) {
     }
 
 	//QString textColor = importColor(first_glyph.);
-	qreal xCoor = /* m_doc->currentPage()->xOffset() + */ (double)first_glyph.text_position.x();
+	qreal xCoor =  m_doc->currentPage()->xOffset() + (double)first_glyph.text_position.x();
 	qreal yCoor = m_doc->currentPage()->initialHeight() - (/*m_doc->currentPage()->yOffset() + */(double)first_glyph.text_position.y()); // don't know if y is top down or bottom up
 	double  lineWidth = 0.0;
 	/* colours don't get reset to CommonStrings::None often enough.*/
-	int z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Rectangle, xCoor, yCoor, 40, 40, 0, CommonStrings::None/* this->CurrColorFill */, CommonStrings::None /* this->CurrColorStroke*/);//, PageItem::ItemKind::InlineItem);
+	int z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Rectangle, xCoor, yCoor, 40, 40, 0, CommonStrings::None, CommonStrings::None /* this->CurrColorStroke*/);//, PageItem::ItemKind::InlineItem);
 	//int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
 
 
@@ -3681,26 +3706,10 @@ void SlaOutputDev::_flushText(GfxState *state) {
 	//ObjStyle tmpObjStyle;
 	ParagraphStyle pStyle;
 	CharStyle cStyle;
-	finishItem(text_node,pStyle, cStyle);
+	finishItem(text_node,state, pStyle, cStyle);
 	_setFillAndStrokeForPdf(state, text_node);
 
-		/*
-		m_doc->adjustItemSize(ite);
-		m_Elements->append(ite);
-		if (m_groupStack.count() != 0)
-		{
-			m_groupStack.top().Items.append(ite);
-			applyMask(ite);
-		}
-
-		*/
-		/*****************************/
-
-
-		text_node = m_doc->Items->at(z);
-
-		m_doc->adjustItemSize(text_node);
-		m_Elements->append(text_node);
+		
 
     // Set text matrix... This need to be done so that the globaal world view that we rite out glyphs to is transformed correctly by the context matrix for each glyph, possibly anyhow.
     QTransform text_transform(_text_matrix);
@@ -3712,139 +3721,63 @@ void SlaOutputDev::_flushText(GfxState *state) {
     text_node->setAttribute("transform", transform);
     g_free(transform);
 	*/
-    bool new_tspan = true;
-    bool same_coords[2] = {true, true};
-    QPointF last_delta_pos;
-    unsigned int glyphs_in_a_row = 0;
-	//TODO: Verify this, but I think we just use text_node for the main bodyu then use a painterPath for tspan_node, but only create it once all the text is rfeady to write.
+	parseText(_glyphs, text_node, pStyle, cStyle);
+	int shade = 100;
+	QString CurrColorText = getColor(state->getFillColorSpace(), state->getFillColor(), &shade);
+	applyTextStyle(text_node, first_glyph.style->getFont().family(), CurrColorText, first_glyph.style->getFont().pointSizeF());
+	text_node->itemText.insertChars(SpecialChars::PARSEP, true);
+
+	FPointArray boundingBoxShape;
+	boundingBoxShape.resize(0);
+	boundingBoxShape.svgInit();
+
+	double bbosdoubles[32] = { 0,0
+							,0,0
+							,100,0
+							,100,0
+							,100,0
+							,100,0
+							,100,100
+							,100,100
+							,100,100
+							,100,100
+							,0,100
+							,0,100
+							,0,100
+							,0,100
+							,0,0
+							,0,0
+	};
+	boundingBoxShape.svgMoveTo(bbosdoubles[0], bbosdoubles[1]);
+	for (int a = 0; a < 16; a += 2)
+	{
+		boundingBoxShape.append(FPoint(bbosdoubles[a * 2], bbosdoubles[a * 2 + 1]));
+	}
 
 
-
-    //Inkscape::XML::Node *tspan_node = nullptr;
-	QVector<double> x_coords;
-	QVector<double> y_coords;
-    QString text_buffer;
-	bool btspan_node = false;
-    // Output all buffered glyphs
-	i = _glyphs.begin();
-	while (true) {
-		const PdfGlyph& glyph = (*i);
-		qDebug() << "PdfGlyph: '" << glyph.code << "'";
-
-		// Append the character to the text buffer, I thinkl this should be at the beging otherwiose you miss off the last character.
-		if (glyph.code.length() != 0 && !glyph.code.isNull()) { //don't know which one is equivalent to empty
-			text_buffer += glyph.code;
+	/*
+		for (int n = 0; n < boundingBoxShape.count(); n++) {
+			bbosdoubles[n * 2] = boundingBoxShape[n].x();
+			bbosdoubles[n * 2 + 1] = boundingBoxShape[n].y();
 		}
+		*/
+		//text_node->setShape(boundingBoxShape);
+		//text_node->PoLine = boundingBoxShape.copy();
+		//text_node->update();
+		//text_node->ContourLine = text_node->PoLine.copy();
+		//text_node->PoLine = boundingBoxShape.copy();
+		//text_node->createGradientMesh(4, 4);
+		//PageItem::TextFlowMode textFlowMode = text_node->textFlowMode();
+		//FPointArray shape = text_node->getFrame()->shape();
+	boundingBoxShape.scale(text_node->width()/100.0, text_node->height()/100.0);
+	//text_node->setTextFlowMode(PageItem::TextFlowDisabled);
+	//text_node->PoLine = boundingBoxShape.copy(); // this should be the same as settiong the frame shape,  boundingBox has to be scaled corrcectly remembering one of the matrix is in percentages
 
-		std::vector<PdfGlyph>::iterator prev_iterator;// = NULL;
-		if (i != _glyphs.begin()) {
-			prev_iterator = i - 1;
-		}
-        // Check if we need to make a new tspan
-        if (glyph.style_changed) {
-            new_tspan = true;
-        } else if ( i != _glyphs.begin() ) {
-            const PdfGlyph& prev_glyph = (*prev_iterator);
-            if ( !( ( glyph.dy == 0.0 && prev_glyph.dy == 0.0 &&
-                     glyph.text_position.y() == prev_glyph.text_position.y() ) ||
-                    ( glyph.dx == 0.0 && prev_glyph.dx == 0.0 &&
-                     glyph.text_position.x() == prev_glyph.text_position.x() ) ) ) {
-                new_tspan = true;
-            }
-        }
+	//text_node->setWidthHeight(boundingBox.width(), boundingBox.height() + 30);
+	//text_node->meshToShape();
+	text_node->SetFrameShape(32, bbosdoubles);
+	text_node->ContourLine = text_node->PoLine.copy();
 
-        // Create tspan node if needed
-        if ( new_tspan || i == _glyphs.end() - 1) {
-            if (btspan_node) {
-                // Set the x and y coordinate arrays
-
-
-
-				/*
-                if ( same_coords[0] ) {
-                    sp_repr_set_svg_double(tspan_node, "x", last_delta_pos[0]);
-                } else {
-                    tspan_node->("x", x_coords);
-                }
-
-                if ( same_coords[1] ) {
-                    sp_repr_set_svg_double(tspan_node, "y", last_delta_pos[1]);
-                } else {
-                    tspan_node->setAttributeOrRemoveIfEmpty("y", y_coords);
-                }
-				*/
-				double startX = x_coords[0];
-				double startY = y_coords[0];
-				qDebug() << "tspan content: " <<  text_buffer;
-				text_node->itemText.insertChars(text_buffer);
-				text_node->itemText.trim();
-				text_node->update(); //don't knoww which one if either i need to get it to redraw.
-				//ite->updateClip();
-				/*
-                if ( glyphs_in_a_row > 1 ) {
-                    tspan_node->setAttribute("sodipodi:role", "line");
-                }
-				*/
-                // Add text content node to tspan
-                //Inkscape::XML::Node *text_content = _xml_doc->createTextNode(text_buffer.c_str());				
-                // Clear temporary buffers
-                x_coords.clear();
-                y_coords.clear();
-                text_buffer.clear();
-                //Inkscape::GC::release(tspan_node);
-                glyphs_in_a_row = 0;
-            }
-			if (i == _glyphs.end() - 1) {
-				//sp_repr_css_attr_unref((*prev_iterator).style);
-				break;
-            } else {
-				btspan_node = true;
-                //tspan_node = _xml_doc->createElement("svg:tspan");
-
-                ///////
-                // Create a font specification string and save the attribute in the style
-                //PangoFontDescription *descr = pango_font_description_from_string(glyph.font_specification);
-                //Glib::ustring properFontSpec = font_factory::Default()->ConstructFontSpecification(descr);
-                //pango_font_description_free(descr);
-
-				glyph.style->setFont(this->_current_font);
-
-                // Set style and unref SPCSSAttr if it won't be needed anymore
-                // assume all <tspan> nodes in a <text> node share the same style
-                if ( glyph.style_changed && i != _glyphs.begin() ) {    // Free previous style
-					//TODO: Tidy up, makle sure we have no leaks.
-                    //sp_repr_css_attr_unref((*prev_iterator).style);
-                }
-            }
-            new_tspan = false;
-        }
-        if ( glyphs_in_a_row > 0 ) {
-            //x_coords.append(" ");
-            //y_coords.append(" ");
-			same_coords[0] = true;
-			same_coords[1] = true;
-            // Check if we have the same coordinates
-            const PdfGlyph& prev_glyph = (*prev_iterator);
-            if ( glyph.text_position.x() != prev_glyph.text_position.x() ) {
-                same_coords[0] = false;
-            }
-			if (glyph.text_position.y() != prev_glyph.text_position.y()) {
-				same_coords[1] = false;
-			}
-        }
-        // Append the coordinates to their respective strings
-        QPointF delta_pos( glyph.text_position - first_glyph.text_position );
-		delta_pos.setY(delta_pos.y() + glyph.rise);
-		delta_pos.setY(delta_pos.y() * -1.0); //flip-it
-		delta_pos.setY(delta_pos.y() * _font_scaling);
-        x_coords.append(delta_pos.x());
-        y_coords.append(delta_pos.y());
-        last_delta_pos = delta_pos;
-
-        glyphs_in_a_row++;
-        ++i;
-    }
-    _glyphs.clear();
 	m_doc->Items->removeLast();
 	m_Elements->append(text_node);
 	if (m_groupStack.count() != 0)
@@ -4219,6 +4152,9 @@ err1:
 void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, POPPLER_CONST_082 Unicode* u, int uLen)
 {
 	qDebug() << "SlaOutputDev::drawChar x:" << x << "y:" << y << "dx:" << dx << "dy" << dy << "code:" << code;
+	if (dy != 0) {
+		true == true;
+	}
 	//for importing text as glyphs
 	double x1, y1, x2, y2;
 	//if (import_text_as_vectors) {
@@ -4329,7 +4265,10 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 
 GBool SlaOutputDev::beginType3Char(GfxState *state, double x, double y, double dx, double dy, CharCode code, POPPLER_CONST_082 Unicode *u, int uLen)
 {
-//	qDebug() << "beginType3Char";
+	qDebug() << "beginType3Char";
+	if (import_text_as_vectors == false)
+		return gTrue;
+	/*There's a bug her eas the stack always gets reduced when endType3Char is called */
 	GfxFont *gfxFont;
 	if (!(gfxFont = state->getFont()))
 		return gTrue;
@@ -4344,7 +4283,9 @@ GBool SlaOutputDev::beginType3Char(GfxState *state, double x, double y, double d
 
 void SlaOutputDev::endType3Char(GfxState *state)
 {
-//	qDebug() << "endType3Char";
+	qDebug() << "endType3Char";
+	if (import_text_as_vectors == false)
+		return;
 	F3Entry f3e = m_F3Stack.pop();
 	groupEntry gElements = m_groupStack.pop();
 	m_doc->m_Selection->clear();
@@ -4418,7 +4359,7 @@ void SlaOutputDev::endTextObject(GfxState* state)
 		if (gElements.Items.count() > 0)
 		{
 			for (int dre = 0; dre < gElements.Items.count(); ++dre)
-			{
+			{				
 				tmpSel->addItem(gElements.Items.at(dre), true);
 				m_Elements->removeAll(gElements.Items.at(dre));
 			}
@@ -4428,15 +4369,17 @@ void SlaOutputDev::endTextObject(GfxState* state)
 			else
 				ite = gElements.Items.first();
 			ite->setGroupClipping(false);
-			ite->setFillTransparency(1.0 - state->getFillOpacity());
-			ite->setFillBlendmode(getBlendMode(state));
+			ite->setLineTransparency(1.0);// this is a duplication of effort, but we want to make sure all the bounding boxes of the items aren't visible //-state->getFillOpacity());
+			//ite->setFillTransparency(0);
+			//ite->setFillBlendmode(getBlendMode(state));
 			for (int as = 0; as < tmpSel->count(); ++as)
-			{
+			{				
 				m_Elements->append(tmpSel->itemAt(as));
 			}
 			if (m_groupStack.count() != 0)
 				applyMask(ite);
 		}
+		
 		if (m_groupStack.count() != 0)
 		{
 			for (int as = 0; as < tmpSel->count(); ++as)
@@ -4448,6 +4391,7 @@ void SlaOutputDev::endTextObject(GfxState* state)
 			}
 		}
 		tmpSel->clear();
+		
 	}
 	// TODO: clip if render_mode >= 4
 	_in_text_object = false;

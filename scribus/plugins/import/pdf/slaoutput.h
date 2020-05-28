@@ -336,7 +336,7 @@ public:
 	void _flushText(GfxState* state);
     void updateTextShift(GfxState *state, double shift) override;
 	void updateTextPos(GfxState* state);
-	void finishItem(PageItem* item, ParagraphStyle& pStyle, CharStyle& cStyle);
+	void finishItem(PageItem* item, GfxState* state, ParagraphStyle& pStyle, CharStyle& cStyle);	
 	void parseText(std::vector<PdfGlyph>& glyphs, PageItem* item, ParagraphStyle& pStyle, CharStyle& cStyle);
 
 	void _updateFontForText(GfxState *state);
