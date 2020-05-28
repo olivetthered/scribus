@@ -3346,29 +3346,30 @@ void SlaOutputDev::updateTextShift(GfxState *state, double shift) {
 
 /* PDF never deviates from the line when it comes to colenear
 */
-static bool _coLinera(qreal& a, qreal& b) { 
+bool SlaOutputDev::_coLinera(qreal a, qreal b) {
 	return a == b ? true : false;
 }
 
 /* like _colenia but we allow a deviation of upto +-2 rejion font text widths
 */
-bool SlaOutputDev::_closeToX(qreal& x1, qreal& x2){
-	return abs(x1 - x2) <= _activeTextRegion.coreText.mWidth() * 2 ? true : false;
+bool SlaOutputDev::_closeToX(qreal x1, qreal x2){
+	//TODO: return abs(x1 - x2) <= m_activeTextRegion->coreText.mWidth() * 2 ? true : false;
+	return true;
 }
 
 /* like _colenia but we allow a deviation of upto 2 rejion font linespaces, but in one direction and half a line space in the other direction 
 
 */
 
-bool SlaOutputDev::_closeToY(qreal& y1, qreal& y2) {
-	return y2 - y1 <= _activeTextRegion.modeHeigth() * 2 ? true : y1 - y2 <= _activeTextRegion.modeHeigth() * 0.5 ? true : false  ;
+bool SlaOutputDev::_closeToY(qreal y1, qreal y2) {
+	return (y2 - y1) <= m_activeTextRegion->modeHeigth * 2 ? true : (y1 - y2) <= m_activeTextRegion->modeHeigth * 0.5 ? true : false  ;
 }
 /* lesss than the last y value but bot more than the line spacing less, 
 could also use the base line of the last line to be more accurate*/
 bool SlaOutputDev::_adjunctLesser(qreal testY, qreal lastY, qreal baseY) {
 	return (testY < lastY
-		&& testY >= baseY - _activeTextRegion.modeHeigth()
-		&& lastY >= baseY - _activeTextRegion.modeHeigth()) ? true : false;
+		&& testY >= baseY - m_activeTextRegion->modeHeigth
+		&& lastY >= baseY - m_activeTextRegion->modeHeigth) ? true : false;
 }
 
 /* lesss than the last y value but bot more than the line spacing less,
@@ -3376,10 +3377,94 @@ could also use the base line of the last line to be more accurate*/
 
 bool SlaOutputDev::_adjunctGreater(qreal testY, qreal lastY, qreal baseY) {
 	return (testY > lastY
-		&& lastY <= baseY - _activeTextRegion.modeHeigth()  *0.5) ? true : false;
+		&& lastY <= baseY - m_activeTextRegion->modeHeigth  *0.5) ? true : false;
+}
+
+bool SlaOutputDev::_linearTest(QPointF point, bool xInLimits, bool yInLimits) {
+	bool pass = false;
+	// see if we arew continiing along a line or if we can add a new line
+	if (SlaOutputDev::_coLinera(point.y(), m_activeTextRegion->_lastXY.y()))
+	{
+		// to take into account this first line may have truncated early, leaving the rest of the lines dangling out x's
+		if (xInLimits) {
+			// this is for item ##16
+			// ok, this should only happen when a new glyph is added not when the cursor position is set, but in both cases we can call extend by the point and set the glyph to the current glyph checking that it's not a duplicate
+			//TODO: m_activeTextRegion->textRegionLines.end().extend(point).setGlyph(newGlyph);
+			pass = true;
+		}
+	} // else see if y is a bit too much off thelastyx line to be linear
+	else if (_adjunctLesser(point.y(), m_activeTextRegion->_lastXY.y(), m_activeTextRegion->_lineBaseXY.y())) {
+		// character has gone suprtscript
+		pass = true;
+	}
+	else if (_adjunctGreater(point.y(), m_activeTextRegion->_lastXY.y(), m_activeTextRegion->_lineBaseXY.y())) {
+		if (SlaOutputDev::_coLinera(point.y(), m_activeTextRegion->_lineBaseXY.y())) //PDF never deviates from the line when it comes to colenear
+		{
+			// were back on track
+			pass = true;
+		}
+		else {
+			// this character has overflowed the height, or is still superscript just not so much
+			pass = true;
+		}
+	}
+	else {
+		if (_closeToX(m_activeTextRegion->textRegioBasenOrigin.x(), point.x()))
+		{
+			if (_closeToY(point.y(), m_activeTextRegion->_lastXY.y())) {
+				if (_closeToX(m_activeTextRegion->textRegionLines[m_activeTextRegion->textRegionLines.size() - 2].width, m_activeTextRegion->maxWidth)) {
+					// add a new line and update the deltas
+					pass = true;
+				}
+
+			}
+		}
+
+	}
+	return pass;
 }
 
 
+void SlaOutputDev::_moveToPoint(QPointF newPoint) {
+	// I need to write down which ones we want so I can work it all outr.
+	bool xInLimits = false;
+	if (_closeToX(newPoint.x(), m_activeTextRegion->_lastXY.x())) {
+		xInLimits = true;
+	}
+	bool yInLimits = false;
+	if (_closeToY(newPoint.y(), m_activeTextRegion->_lastXY.y())) {
+		yInLimits = true;
+	}
+	bool pass = _linearTest(newPoint, xInLimits, yInLimits);
+
+	// if nothing can be done then flush and create a new trextrext and re-adcfd ther char, set the pos etc...
+	if (pass == false) {
+		//TODO: _flushText();pdf
+		delete m_activeTextRegion;
+		m_activeTextRegion = new TextRegion();//TODO: newPoint);
+	}
+}
+
+//todo, etract some font heights instesad of using dx all the time
+void SlaOutputDev::_addGlyphAtPoint(QPointF newGlyphPoint) {
+	// shoukld probably be more forgiving when adding a glyph in the x direction because it could be several white spaces skipped
+	bool xInLimits = false;
+	if (_closeToX(newGlyphPoint.x(), m_activeTextRegion->_lastXY.x())) {
+		xInLimits = true;
+	}
+	bool yInLimits = false;
+	if (_closeToY(newGlyphPoint.y(), m_activeTextRegion->_lastXY.y())) {
+		yInLimits = true;
+	}
+	bool pass = _linearTest(newGlyphPoint, xInLimits, yInLimits);
+
+	// if nothing can be done then flush and create a new trextrext and re-adcfd ther char, set the pos etc...
+	if (pass == false) {
+		//TODO: _flushText();
+		delete m_activeTextRegion;
+		m_activeTextRegion = new TextRegion();//TODO: newGlyphPoint);
+	}
+}
 /**
  * \brief Updates current text position
  */
@@ -3388,109 +3473,8 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
     QPointF new_position = QPointF(state->getCurX(), state->getCurY());
 	if (_glyphs.size() == 0)
 	{
-		class TextRegionLine
-		{
-			qreal maxHeight = -1;
-			qreal modeHeigth = -1;
-			qreal width = -1;
-			QPointF baseOrigin = QPointF(-1, -1);
-			std::vector<TextRegionLine> segments = std::vector<TextRegionLine>();
-
-		};
 		
-		class TextRegion {
-			QPointF textRegioBasenOrigin = QPointF(-1, -1);
-			qreal maxHeight = -1;
-			qreal modeHeigth = -1;
-			std::vector<TextRegionLine> textRegionLines = std::vector<TextRegionLine>();
-			qreal maxWidth = -1;
-			
-			bool linearTest(QPointF point, bool xInLimits, bool yInLimits) {
-				bool pass = false;
-				// see if we arew continiing along a line or if we can add a new line
-				if _coLinera(newGlyphPoint.y(), _lastXY.y())
-				{
-					// to take into account this first line may have truncated early, leaving the rest of the lines dangling out x's
-					if (xInLimits) {
-						// this is for item ##16
-						textRegionLines.end().extendByGlyph(newGlyph);
-						pass = true;
-					}
-				} // else see if y is a bit too much off thelastyx line to be linear
-				else if (_adjunctLesser(point.y(), _lastXY.y(), _lineBaseXY.y()) {
-					// character has gone suprtscript
-					pass = true;
-				}
-				else if (_adjunctGreater(point.y(), _lastXY.y(), _lineBaseX().y)) {
-					if _coLinera(newGlyphPoint.y(), _lineBaseXY.y()) //PDF never deviates from the line when it comes to colenear
-					{
-						// were back on track
-						pass = true;
-					}
-					else {
-						// this character has overflowed the height, or is still superscript just not so much
-						pass = true;
-					}
-				}
-				else {
-					if (_closeToX(textRegioBasenOrigin.x(), point.x()))
-					{
-						if (_closeToY(point.y(), _lastXY.y()) {
-							if (_closeToX(textRegionLines.end(-1).currentWidth, maxWidth)) {
-								// add a new line and update the deltas
-								pass = true;
-							}
-
-						}
-					}
-
-				}
-				return pass;
-			}
-
-
-			void MoveToPoint(QPointF newPoint) {
-				// I need to write down which ones we want so I can work it all outr.
-				bool xInLimits = false;
-				if (_closeToX(newPoint.x(), _lastXY.x()) {
-					xInLimits = true;
-				}
-				bool yInLimits = false;
-				if (_closeToY(newPoint.y(), _lastXY.y()) {
-					yInLimits = true;
-				}
-				bool pass = linearTest(newPoint, xInLimits, yInLimits);
-
-				// if nothing can be done then flush and create a new trextrext and re-adcfd ther char, set the pos etc...
-				if (pass == false) {
-					_flushText();
-					_activbeTextRejion = new TextRegion(newGlyphPoint);
-				}
-			}
-
-			//todo, etract some font heights instesad of using dx all the time
-			void AddGlyphAtPoint(QPointF newGlyphPoint) {
-				// shoukld probably be more forgiving when adding a glyph in the x direction because it could be several white spaces skipped
-				bool xInLimits = false;
-				if(_closeToX(newGlyphPoint.x(), _lastXY.x()){
-						xInLimits = true;
-				}
-				bool yInLimits = false;
-				if(_closeToY(newGlyphPoint.y(), _lastXY.y()){
-						yInLimits = true;
-				}
-				bool pass = linearTest(newGlyphPoint, xInLimits, yInLimits);
-				
-				// if nothing can be done then flush and create a new trextrext and re-adcfd ther char, set the pos etc...
-				if (pass == false) {
-					_flushText();
-					_activbeTextRejion = new TextRegion(newGlyphPoint);
-				}
-			}
-		private:
-			QPoint _lastXY = QPoint(-1, -1);
-		};
-		QPoint textRegionOrigin = new_position;
+		QPointF textRegionOrigin = new_position;
 	}
 	
 	_text_position = new_position;
