@@ -340,6 +340,7 @@ public:
 	void parseText(std::vector<PdfGlyph>& glyphs, PageItem* item, ParagraphStyle& pStyle, CharStyle& cStyle);
 
 	void _updateFontForText(GfxState *state);
+	QString _last_font_specification;
 	QString _bestMatchingFont(QString PDFname);
     void _updateStyle(GfxState *state);	
 
