@@ -3734,7 +3734,7 @@ void SlaOutputDev::updateTextMat(GfxState *state) {
 	{
 		// I think we can change the charStyle mid text stream to account for scaling, so instead of calling _flushText we should maked a call to set cStyle
 		// I'm leaving this in here to test grouping
-		_flushText(state);
+		//NOTE: Uncomment this line to seperate the text rejoins out by font and font scaling _flushText(state);
 		_text_matrix = new_text_matrix;
 		_font_scaling = max_scale;
 	}
