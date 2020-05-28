@@ -3350,7 +3350,92 @@ void SlaOutputDev::updateTextShift(GfxState *state, double shift) {
 void SlaOutputDev::updateTextPos(GfxState* state) {
 	qDebug() << "updateTextPos()";
     QPoint new_position = QPoint(state->getCurX(), state->getCurY());
-    _text_position = new_position;
+	if (_glyphs.size() == 0)
+	{
+		class TextRegionLine
+		{
+			uint maxHeight = -1;
+			uint modeHeigth = -1;
+			uint width = -1;
+			QPoint baseOrigin = QPoint(-1, -1);
+			std::vector<TextRegionLine> segments = std::vector<TextRegionLine>();
+
+		};
+		
+		class TextRegion {
+			QPoint textRegioBasenOrigin = QPoint(-1, -1);
+			uint maxHeight = -1;
+			uint modeHeigth = -1;
+			std::vector<TextRegionLine> textRegionLines = std::vector<TextRegionLine>();
+			uint maxWidth = -1;
+			void MoveToPoint(QPoint newPoint) {
+
+			}
+			//todo, etract some font heights instesad of using dx all the time
+			void AddGlyphAtPoint(QPoint newGlyphPoint, uint dx) {
+				// I need to write down which ones we want so I can work it all outr.
+				xInLimits = false;
+				int wobbbleX = closeToX(newGlyphPoint, _lastXY);
+				if (abs(wobbbleX) < MAX_WOBBLE) {
+					//allow the amount we wobble buy to be adaptive, may be overkill and pointless
+					if (abs(wobbbleX) < (dx * wobbleChars)) {
+						if (abs(wobbbleX) / dx > wobbleChars - 4 && wobbleChars < MAX_WOBBLE_CHARS) {
+							wobbleChars = min(abs(wobbbleX) / dx + 4, MAX_WOBBLE_CHARS);
+						}
+						xInLimits = true;
+					}
+				}
+				yInLimits = false;
+				int wobbbleY = closeToY(newGlyphPoint, _lastXY);
+				if (abs(wobbbleY) < MAX_WOBBLE) {
+					//allow the amount we wobble buy to be adaptive, may be overkill and pointless
+					if (abs(wobbbleY) < (dx * wobbleChars)) {
+						if (abs(wobbbleY) / dx > wobbleChars - 4 && wobbleChars < MAX_WOBBLE_CHARS) {
+							wobbleChars = min(abs(wobbbleY) / dx + 4, MAX_WOBBLE_CHARS);
+						}
+						yInLimits = true;
+					}
+				}
+				// see if we arew continiing along a line or if we can add a new line
+				if CoLinera(newGlyphPoint, _lastXY)
+				{
+					// to take into account this first line may have truncated early, leaving the rest of the lines dangling out x's
+					if (xInLimits) {
+						textRegionLines.end().extendByGlyph(newGlyph);
+					}
+				} // else see if y is a bit too much off thelastyx line to be linear
+				else if(AdjunctLesser(newGlyphPoint, _lastXY, _lineBaseXY, max(dx, modeHeigth)) {
+					// character has gone suprtscript
+				} else if (AdjunctGrater(newGlyphPoint, _lastXY, _lineBaseXY, max(dx, modeHeigth)) {
+					if CoLinera(newGlyphPoint, _lineBaseXY)
+					{
+						// were back on track
+					}
+					else {
+						// this character has overflowed the height
+					}
+				}
+				else {
+					if (closeTo(textRegioBasenOrigin.x(), newGlyphPoint.x()))
+					{
+						if (yIsCloseToDeltaY(newGlyphPoint, _lastXY, modeHeigth != -1 : modeHeigth :max(dx * 2)) {
+							if (closeTo(textRegionLines.end(-1).currentWidth, maxWidth)) {
+								// add a new line and update the deltas
+							}
+
+						}
+					}
+
+				}
+				// if nothing can be done then flush and create a new trextrext and re-adcfd ther char, set the pos etc...
+			}
+		private:
+			QPoint _lastXY = QPoint(-1, -1);
+		};
+		QPoint textRegionOrigin = new_position;
+	}
+	
+	_text_position = new_position;
 }
 
 /*code mostly taken from importodg.cpp which also supports some line styles and more fill options etc...*/
