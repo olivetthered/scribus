@@ -154,6 +154,19 @@ private:
 };
 
 
+/*
+* Holds all the dtails for each glyph in the text imported from the pdf file.
+*
+*/
+struct PdfGlyph {
+	QPointF position;    // Absolute glyph coords
+	double dx;  // X advance value
+	double dy;  // Y advance value
+	double rise;    // Text rise parameter
+	QString code;   // UTF-16 coded character but we only store and use UTF-8, the slternstive is const char * for utf8 so far as qt is concerned
+	bool is_space;
+};
+
 class SlaOutputDev : public OutputDev
 {
 public:
@@ -306,6 +319,16 @@ private:
 
 	void createImageFrame(QImage& image, GfxState *state, int numColorComponents);
 
+	//PDF Textbox framework
+	static bool coLinera(qreal a, qreal b);
+	bool closeToX(qreal x1, qreal x2);
+	bool closeToY(qreal y1, qreal y2);
+	bool adjunctLesser(qreal testY, qreal lastY, qreal baseY);
+	bool adjunctGreater(qreal testY, qreal lastY, qreal baseY);
+	bool linearTest(QPointF point, bool xInLimits, bool yInLimits);
+	void moveToPoint(QPointF newPoint);
+	void addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
+
 	bool pathIsClosed {false};
 	QString CurrColorFill;
 	int CurrFillShade {100};
@@ -371,6 +394,11 @@ private:
 	QHash<QString, QList<int> > m_radioMap;
 	QHash<int, PageItem*> m_radioButtons;
 	int m_actPage;
+
+	//PDF Textbox framework
+	TextRegion *m_activeTextRegion = NULL;
+	std::vector<PdfGlyph> m_glyphs; //this may replace some of the other settings or it may not, certainly not font as text gets flushed if the font changes
+
 };
 
 #endif
