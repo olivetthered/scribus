@@ -3972,6 +3972,15 @@ bool SlaOutputDev::linearTest(QPointF point, bool xInLimits, bool yInLimits) {
 
 void SlaOutputDev::moveToPoint(QPointF newPoint)
 {
+	// Do some initilization if we are in a new text region
+	if (m_activeTextRegion->_lineBaseXY == QPointF(-1, -1))
+	{
+		m_activeTextRegion->_lineBaseXY = newPoint;
+	}
+	if (m_activeTextRegion->_lastXY == QPointF(-1, -1))
+	{
+		m_activeTextRegion->_lastXY = newPoint;
+	}
 	//TODO: I need to write down which ones we want so I can work it all out, for now just some basic fuzzy matching support.
 	bool xInLimits = false;
 	if (closeToX(newPoint.x(), m_activeTextRegion->_lastXY.x()))
@@ -4003,14 +4012,16 @@ void SlaOutputDev::moveToPoint(QPointF newPoint)
 		//FIXME: ... there should actually be a vector of these because we don't want to delete them
 		//TODO: _flushText();pdf
 		//TODO: render the m_activeTextRegion
+		renderTextFrame();
 		delete m_activeTextRegion;
 		//Create and initilize a new TextRegion
 
 		m_activeTextRegion = new TextRegion();
-		if (m_glyphs.size() == 0)
-		{
-			m_activeTextRegion->textRegioBasenOrigin = newPoint;
-		}
+		//if (m_glyphs.size() == 0)
+		//{
+		
+		m_activeTextRegion->textRegioBasenOrigin = newPoint;
+		//}
 		m_activeTextRegion->_lineBaseXY = newPoint;
 		m_activeTextRegion->_lastXY = newPoint;
 	}
@@ -4192,34 +4203,24 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 	qDebug() << "updateTextPos()";
 
 	QPointF new_position = QPointF(state->getCurX(), state->getCurY());
-	//TODO: Implement this in the framework when new_position indicates a new text region should be created.
-	if (m_glyphs.empty())
+	//check to see if we are in a new text region
+	if (m_activeTextRegion->textRegioBasenOrigin == QPointF(-1, -1))
 	{
 		//FIXME: Actually put this in the correct class	
 			//QPointF textRegionOrigin = new_position;
 		m_activeTextRegion->textRegioBasenOrigin = new_position;
+
 	}
 	else
 	{
 		// a delayed call using the last glyph that was put onto the stack. it will be a glyph situated on the far side bounds of the text region
 		addGlyphAtPoint(m_glyphs.back().position, m_glyphs.back());
 	}
-	//FIXME: I think _moveToPoint should do some of this. actually the first time innitialization is needed
-	if (m_activeTextRegion->_lineBaseXY == QPointF(-1, -1)) {
-		m_activeTextRegion->_lineBaseXY = new_position;
-	}
-	if (m_activeTextRegion->_lastXY == QPointF(-1, -1))
-	{
-		m_activeTextRegion->_lastXY = new_position;
-	}
+
 	moveToPoint(new_position);
-	//TODO: See if text position is still needed
-	m_text_position = new_position;
-	/* TODO: Implement this in the framework
-	QPointF d = QPointF(abs(m_text_position.x() - new_position.x()), new_position.y() - m_text_position.y());
-	
-	if (_in_text_object && d.x() > 10 && d.y() > 10) {
-		_flushText(state);
-	}
-	*/
+
+}
+void SlaOutputDev::renderTextFrame()
+{
+	//TODO: Implement, this should all be based on tyhe framework and using m_activeTextRegion
 }
