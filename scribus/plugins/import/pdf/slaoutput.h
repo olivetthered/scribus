@@ -357,6 +357,7 @@ private:
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
 	void setFillAndStrokeForPDF(GfxState* state, PageItem* text_node);
 	void updateTextPos(GfxState* state) override;
+	void renderTextFrame();
 
 	bool pathIsClosed {false};
 	QString CurrColorFill;
