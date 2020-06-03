@@ -284,6 +284,8 @@ SlaOutputDev::SlaOutputDev(ScribusDoc* doc, QList<PageItem*> *Elements, QStringL
 	currentLayer = m_doc->activeLayer();
 	layersSetByOCG = false;
 	importTextAsVectors - true;
+	// FIXME: textregions should be an array
+	m_activeTextRegion = new TextRegion();
 	//FIXME: can probably have an array of these instead of creting new ones and deleting them
 	addChar = new AddFirstChar(this);
 }
@@ -3979,13 +3981,39 @@ bool SlaOutputDev::linearTest(QPointF point, bool xInLimits, bool yInLimits) {
 		if (closeToX(m_activeTextRegion->textRegioBasenOrigin.x(), point.x()))
 		{
 			if (closeToY(point.y(), m_activeTextRegion->_lastXY.y())) {
-				if (closeToX(m_activeTextRegion->textRegionLines[m_activeTextRegion->textRegionLines.size() - 2].width, m_activeTextRegion->maxWidth)) {
+				if ((m_activeTextRegion->textRegionLines.size() >= 2) && closeToX(m_activeTextRegion->textRegionLines[m_activeTextRegion->textRegionLines.size() - 2].width, m_activeTextRegion->maxWidth)) {
 					//TODO: add a new line and update the deltas
 					pass = true;
 				}
 			}
 		}
 	}
+	return pass;
+}
+
+// Just perform some basic checks to see if newPoint can reasonably be asscribed to the current textframe.
+bool SlaOutputDev::isRegionConcurrent(QPointF newPoint)
+{	
+	if (m_activeTextRegion->_lineBaseXY == QPointF(-1, -1))
+	{
+		m_activeTextRegion->_lineBaseXY = newPoint;
+	}
+	if (m_activeTextRegion->_lastXY == QPointF(-1, -1))
+	{
+		m_activeTextRegion->_lastXY = newPoint;
+	}
+	//TODO: I need to write down which ones we want so I can work it all out, for now just some basic fuzzy matching support.
+	bool xInLimits = false;
+	if (closeToX(newPoint.x(), m_activeTextRegion->_lastXY.x()))
+	{
+		xInLimits = true;
+	}
+	bool yInLimits = false;
+	if (closeToY(newPoint.y(), m_activeTextRegion->_lastXY.y()))
+	{
+		yInLimits = true;
+	}
+	bool pass = linearTest(newPoint, xInLimits, yInLimits);
 	return pass;
 }
 
@@ -4018,13 +4046,20 @@ void SlaOutputDev::moveToPoint(QPointF newPoint)
 	if (pass)
 	{
 		// FIXME: only do this under certain circumstances, we can merge two or move boxes together horrizontally and don't need a new region line on the  m_activeTextRegion we need one on the segments list on textRegionLines.end() . infact this should be done in the linear test function
-		TextRegionLine textRegionLine = TextRegionLine();
-		textRegionLine.baseOrigin = QPointF(newPoint.x(), m_activeTextRegion->_lastXY.y() + 1);
-		textRegionLine.width = 0;
-		textRegionLine.maxHeight = newPoint.y() - m_activeTextRegion->_lastXY.y();
-		textRegionLine.modeHeigth = newPoint.y() - m_activeTextRegion->_lastXY.y();
-		//FIXME: We haven't actually started off any segments yet so don't add them textRegionLine.segments.push_back(TextRegionLine())
-		m_activeTextRegion->textRegionLines.push_back(textRegionLine);
+		
+			TextRegionLine& textRegionLine = TextRegionLine();;
+			if ((m_activeTextRegion->textRegionLines.size() != 0) && (m_activeTextRegion->textRegionLines.back().glyphIndex == -1)) {
+				textRegionLine = (TextRegionLine&)m_activeTextRegion->textRegionLines.back();
+			}
+			textRegionLine.baseOrigin = QPointF(newPoint.x(), m_activeTextRegion->_lastXY.y() + 1);
+			textRegionLine.width = 0;
+			textRegionLine.maxHeight = newPoint.y() - m_activeTextRegion->_lastXY.y();
+			textRegionLine.modeHeigth = newPoint.y() - m_activeTextRegion->_lastXY.y();
+			//FIXME: We haven't actually started off any segments yet so don't add them textRegionLine.segments.push_back(TextRegionLine())
+			if ((m_activeTextRegion->textRegionLines.size() == 0) || (m_activeTextRegion->textRegionLines.back().glyphIndex != -1)) {
+				m_activeTextRegion->textRegionLines.push_back(textRegionLine);
+			}
+		
 	}
 	// if nothing can be done then write out the textregioin and delete it and create a new trextrext and re-adcfd ther char, set the pos etc...
 	if (pass == false)
@@ -4081,13 +4116,30 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 	else {
 		//TODO: possible don't store the glyphs on the textRegion, well certainly not like this, we only need to check bounbdry and feature positions
 		//m_activeTextRegion->glyphs.push_back(new_glyph);
-
+		if (m_activeTextRegion->textRegionLines.size() == 0)
+		{
+			TextRegionLine newTextRegionLine = TextRegionLine();
+			newTextRegionLine.glyphIndex = glyphs.size() - 1;
+			newTextRegionLine.width = new_glyph.dx;
+			m_activeTextRegion->textRegionLines.push_back(newTextRegionLine);
+		}
 		//at the moment a new segment only gets added when the line is created. a new segment should also get added if there's any change in style or layout etc...but that feature can be added llater, it's not needed for basic textframe support with no style.
-		m_activeTextRegion->textRegionLines.back().glyphIndex = glyphs.size() - 1;
+		if (m_activeTextRegion->textRegionLines.back().glyphIndex == -1) {
+			
+			TextRegionLine& textRegionLine = m_activeTextRegion->textRegionLines.back();
+			textRegionLine.glyphIndex = glyphs.size() - 1;			
+			textRegionLine.width = 0;
+			textRegionLine.baseOrigin = QPointF(newGlyphPoint.x(), newGlyphPoint.y());
+			//FIXME: shouldn't i use lastxy here
+			textRegionLine.modeHeigth = newGlyphPoint.y() - textRegionLine.baseOrigin.y();
+			textRegionLine.maxHeight = newGlyphPoint.y() - textRegionLine.baseOrigin.y();
+		}
 		if (m_activeTextRegion->textRegionLines.back().segments.empty())
 		{
 			// add a new segment
 			TextRegionLine newSegment = TextRegionLine();
+			newSegment.glyphIndex = m_activeTextRegion->textRegionLines.back().glyphIndex;
+			newSegment.width = 0;					
 			m_activeTextRegion->textRegionLines.back().segments.push_back(newSegment);
 		}
 		if (m_activeTextRegion->textRegionLines.back().segments.back().width == 0)
@@ -4097,7 +4149,7 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 			segment.baseOrigin = QPointF(newGlyphPoint.x(), m_activeTextRegion->textRegionLines.back().baseOrigin.y());
 			segment.modeHeigth = newGlyphPoint.y() - segment.baseOrigin.y();
 			segment.maxHeight = newGlyphPoint.y() - segment.baseOrigin.y();
-			//FIXME:Set thease properly
+			//FIXME:Set thease properly using lastxy &co.
 			m_activeTextRegion->textRegionLines.back().maxHeight = m_activeTextRegion->textRegionLines.back().maxHeight > segment.maxHeight ? m_activeTextRegion->textRegionLines.back().maxHeight : segment.maxHeight;
 			m_activeTextRegion->textRegionLines.back().modeHeigth = segment.modeHeigth; //FIXME: this needs to be calculated based on the heights of all the segments
 			m_activeTextRegion->textRegionLines.back().width += segment.width;
@@ -4119,7 +4171,7 @@ void TextRegion::renderToTextFrame(std::vector<PdfGlyph>& glyphs, PageItem* text
 	// nothing clever, just get all the body text in one lump and update the text frame
 	textNode->setWidthHeight(this->maxWidth, this->maxHeight);
 	QString bodyText = "";
-	for (int glyphIndex = this->textRegionLines.begin()->glyphIndex; glyphIndex <= this->textRegionLines.end()->segments.end()->glyphIndex; glyphIndex++) {
+	for (int glyphIndex = this->textRegionLines.begin()->glyphIndex; glyphIndex <= this->textRegionLines.back().segments.back().glyphIndex; glyphIndex++) {
 		bodyText += glyphs[glyphIndex].code;
 	}
 	textNode->itemText.insertChars(bodyText);
@@ -4191,10 +4243,10 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 
 	QPointF new_position = QPointF(state->getCurX(), state->getCurY());
 	//check to see if we are in a new text region
-	if (m_activeTextRegion->textRegioBasenOrigin == QPointF(-1, -1))
+	if (m_activeTextRegion->textRegioBasenOrigin == QPointF(-1, -1) || 
+		(m_activeTextRegion->textRegionLines.back().glyphIndex == -1))// && !isRegionConcurrent(new_position)))
 	{
 		//FIXME: Actually put this in the correct class	
-			//QPointF textRegionOrigin = new_position;
 		m_activeTextRegion->textRegioBasenOrigin = new_position;
 
 	}
@@ -4377,11 +4429,8 @@ void AddFirstChar::addChar(GfxState* state, double x, double y, double dx, doubl
 	new_glyph.dy = dy;
 
 	//FIXME: have an array of differnt types of addchar class instead of creating and destroying them all the time
-	delete m_slaOutputDev->addChar;
+	AddCharInterface *charToDelete = m_slaOutputDev->addChar;
 	m_slaOutputDev->addChar = new AddBasicChar(m_slaOutputDev);
-
-	//only need to be called for the very first point
-	m_slaOutputDev->addGlyphAtPoint(QPointF(x, y), new_glyph);
 
 	// Convert the character to UTF-16 since that's our SVG document's encoding	
 	for (int i = 0; i < uLen; i++) {
@@ -4391,6 +4440,10 @@ void AddFirstChar::addChar(GfxState* state, double x, double y, double dx, doubl
 	new_glyph.rise = state->getRise();
 	m_slaOutputDev->glyphs.push_back(new_glyph);
 
+	//only need to be called for the very first point
+	m_slaOutputDev->addGlyphAtPoint(QPointF(x, y), new_glyph);
+
+	delete charToDelete;
 }
 
 void AddBasicChar::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
