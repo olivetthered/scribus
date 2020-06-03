@@ -2573,9 +2573,9 @@ void SlaOutputDev::drawSoftMaskedImage(GfxState *state, Object *ref, Stream *str
 			t++;
 		}
 	}
-	
+
 	createImageFrame(res, state, 3);
-	
+
 	delete imgStr;
 	delete[] buffer;
 	delete image;
@@ -2642,9 +2642,9 @@ void SlaOutputDev::drawMaskedImage(GfxState *state, Object *ref, Stream *str,  i
 			t++;
 		}
 	}
-	
+
 	createImageFrame(res, state, colorMap->getNumPixelComps());
-	
+
 	delete imgStr;
 	delete[] buffer;
 	delete image;
@@ -2764,7 +2764,7 @@ void SlaOutputDev::createImageFrame(QImage& image, GfxState *state, int numColor
 
     // Determine the width and height of the image by undoing the rotation part
 	// of the CTM and applying the result to the unit square.
-	QTransform without_rotation; 
+	QTransform without_rotation;
 	without_rotation = m_ctm * without_rotation.rotate(angle);
 	QRectF trect_wr = without_rotation.mapRect(QRectF(0, 0, 1, 1));
 
@@ -3896,3 +3896,181 @@ bool SlaOutputDev::checkClip()
 	}
 	return ret;
 }
+
+// TODO: remove mutual dependencies and move the render engine into it's own cc and header files because it's getting hard to navigate the code base.
+// PDF never deviates from the line when it comes to colenear
+bool SlaOutputDev::coLinera(qreal a, qreal b) {
+	return a == b ? true : false;
+}
+
+// like _colenia but we allow a deviation of upto +-2 rejion font text widths
+bool SlaOutputDev::closeToX(qreal x1, qreal x2){
+	//TODO: return abs(x1 - x2) <= m_activeTextRegion->coreText.mWidth() * 2 ? true : false;
+	return true;
+}
+
+// like _colenia but we allow a deviation of upto 2 rejion font linespaces, but in one direction and half a line space in the other direction
+bool SlaOutputDev::closeToY(qreal y1, qreal y2) {
+	return (y2 - y1) <= m_activeTextRegion->modeHeigth * 2 ? true : (y1 - y2) <= m_activeTextRegion->modeHeigth * 0.5 ? true : false;
+}
+
+// lesss than the last y value but bot more than the line spacing less, could also use the base line of the last line to be more accurate
+bool SlaOutputDev::adjunctLesser(qreal testY, qreal lastY, qreal baseY) {
+	return (testY < lastY
+		&& testY >= baseY - m_activeTextRegion->modeHeigth
+		&& lastY >= baseY - m_activeTextRegion->modeHeigth) ? true : false;
+}
+
+// lesss than the last y value but bot more than the line spacing less, could also use the base line of the last line to be more accurate
+bool SlaOutputDev::adjunctGreater(qreal testY, qreal lastY, qreal baseY) {
+	return (testY > lastY
+		&& lastY <= baseY - m_activeTextRegion->modeHeigth  *0.5) ? true : false;
+}
+
+bool SlaOutputDev::linearTest(QPointF point, bool xInLimits, bool yInLimits) {
+	bool pass = false;
+	// see if we are continuing along a line or if we can add a new line
+	if (SlaOutputDev::coLinera(point.y(), m_activeTextRegion->_lastXY.y()))
+	{
+		// to take into account this first line may have truncated early, leaving the rest of the lines dangling out x's
+		if (xInLimits) {
+			// this is for item ##16
+			// ok, this should only happen when a new glyph is added not when the cursor position is set, but in both cases we can call extend by the point and set the glyph to the current glyph checking that it's not a duplicate
+			//TODO: m_activeTextRegion->textRegionLines.end().extend(point).setGlyph(newGlyph);
+			pass = true;
+		}
+	} // else see if y is a bit too much off thelastyx line to be linear
+	else if (adjunctLesser(point.y(), m_activeTextRegion->_lastXY.y(), m_activeTextRegion->_lineBaseXY.y())) {
+		//TODO: character has gone suprtscript
+		pass = true;
+	}
+	else if (adjunctGreater(point.y(), m_activeTextRegion->_lastXY.y(), m_activeTextRegion->_lineBaseXY.y())) {
+		if (SlaOutputDev::coLinera(point.y(), m_activeTextRegion->_lineBaseXY.y())) //PDF never deviates from the line when it comes to colenear
+		{
+			// were back on track
+			pass = true;
+		}
+		else {
+			//TODO: this character has overflowed the height, or is still superscript just not so much
+			pass = true;
+		}
+	}
+	else {
+		if (closeToX(m_activeTextRegion->textRegioBasenOrigin.x(), point.x()))
+		{
+			if (closeToY(point.y(), m_activeTextRegion->_lastXY.y())) {
+				if (closeToX(m_activeTextRegion->textRegionLines[m_activeTextRegion->textRegionLines.size() - 2].width, m_activeTextRegion->maxWidth)) {
+					//TODO: add a new line and update the deltas
+					pass = true;
+				}
+			}
+		}
+	}
+	return pass;
+}
+
+
+void SlaOutputDev::moveToPoint(QPointF newPoint)
+{
+	//TODO: I need to write down which ones we want so I can work it all out, for now just some basic fuzzy matching support.
+	bool xInLimits = false;
+	if (closeToX(newPoint.x(), m_activeTextRegion->_lastXY.x()))
+	{
+		xInLimits = true;
+	}
+	bool yInLimits = false;
+	if (closeToY(newPoint.y(), m_activeTextRegion->_lastXY.y()))
+	{
+		yInLimits = true;
+	}
+	bool pass = linearTest(newPoint, xInLimits, yInLimits);
+
+	//TODO: need to check to see if we are creating a new paragraph or not. basically if the cursor is returned to x origin before it reached x width.
+	if (pass)
+	{
+		// FIXME: only do this under certain circumstances, we can merge two or move boxes together horrizontally and don't need a new region line on the  m_activeTextRegion we need one on the segments list on textRegionLines.end() . infact this should be done in the linear test function
+		TextRegionLine textRegionLine = TextRegionLine();
+		textRegionLine.baseOrigin = QPointF(newPoint.x(), m_activeTextRegion->_lastXY.y() + 1);
+		textRegionLine.width = 0;
+		textRegionLine.maxHeight = newPoint.y() - m_activeTextRegion->_lastXY.y();
+		textRegionLine.modeHeigth = newPoint.y() - m_activeTextRegion->_lastXY.y();
+		//FIXME: We haven't actually started off any segments yet so don't add them textRegionLine.segments.push_back(TextRegionLine())
+		m_activeTextRegion->textRegionLines.push_back(textRegionLine);
+	}
+	// if nothing can be done then write out the textregioin and delete it and create a new trextrext and re-adcfd ther char, set the pos etc...
+	if (pass == false)
+	{
+		//FIXME: ... there should actually be a vector of these because we don't want to delete them
+		//TODO: _flushText();pdf
+		//TODO: render the m_activeTextRegion
+		delete m_activeTextRegion;
+		//Create and initilize a new TextRegion
+
+		m_activeTextRegion = new TextRegion();
+		if (m_glyphs.size() == 0)
+		{
+			m_activeTextRegion->textRegioBasenOrigin = newPoint;
+		}
+		m_activeTextRegion->_lineBaseXY = newPoint;
+		m_activeTextRegion->_lastXY = newPoint;
+	}
+}
+
+//TODO:, extract some font heights instesad of using dx all the time
+void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
+
+	QPointF movedGlyphPoint = QPointF(newGlyphPoint.x() + new_glyph.dx, newGlyphPoint.y() + new_glyph.dy);
+	//TODO: should  probably be more forgiving when adding a glyph in the x direction because it could be several white spaces skipped
+	bool xInLimits = false;
+	if (closeToX(movedGlyphPoint.x(), m_activeTextRegion->_lastXY.x())) {
+		xInLimits = true;
+	}
+	bool yInLimits = false;
+	if (closeToY(movedGlyphPoint.y(), m_activeTextRegion->_lastXY.y())) {
+		yInLimits = true;
+	}
+	bool pass = linearTest(movedGlyphPoint, xInLimits, yInLimits);
+
+	// if nothing can be done then write out the textregioin and delete it and create a new trextrext and re-adcfd ther char, set the pos etc...
+	if (pass == false) {
+		//TODO: _flushText();  the textregion should get written out to scribus here, or alternativlty. instead of deleting it keep all the textregions in a vector and update scribus at the end. this may have better performance as the code footprint will in two smalkler bits instead of one large bit so cpu cache may be able to manage more
+		delete m_activeTextRegion;
+		m_activeTextRegion = new TextRegion();//TODO: newGlyphPoint);
+		//TODO: initialize m_activeTextRegion based on newGlyphPoint and new_glyph
+	}
+	else {
+		//TODO: possible don't store the glyphs on the textRegion, well certainly not like this, we only need to check bounbdry and feature positions
+		//m_activeTextRegion->glyphs.push_back(new_glyph);
+
+		//at the moment a new segment only gets added when the line is created. a new segment should also get added if there's any change in style or layout etc...but that feature can be added llater, it's not needed for basic textframe support with no style.
+		 m_activeTextRegion->textRegionLines.back().glyphIndex = _glyphs.size() - 1;
+		if (m_activeTextRegion->textRegionLines.back().segments.empty())
+		{
+			// add a new segment
+			TextRegionLine newSegment = TextRegionLine();
+			m_activeTextRegion->textRegionLines.back().segments.push_back(newSegment);
+		}
+		if(m_activeTextRegion->textRegionLines.back().segments.back().width == 0)
+		{
+			TextRegionLine &segment = m_activeTextRegion->textRegionLines.back().segments.back();
+			segment.width = new_glyph.dx;
+			segment.baseOrigin = QPointF(newGlyphPoint.x(), m_activeTextRegion->textRegionLines.back().baseOrigin.y());
+			segment.modeHeigth = newGlyphPoint.y() - segment.baseOrigin.y();
+			segment.maxHeight = newGlyphPoint.y() - segment.baseOrigin.y();
+			//FIXME:Set thease properly
+			m_activeTextRegion->textRegionLines.back().maxHeight = m_activeTextRegion->textRegionLines.back().maxHeight > segment.maxHeight ? m_activeTextRegion->textRegionLines.back().maxHeight : segment.maxHeight;
+			m_activeTextRegion->textRegionLines.back().modeHeigth = segment.modeHeigth; //FIXME: this needs to be calculated based on the heights of all the segments
+			m_activeTextRegion->textRegionLines.back().width += segment.width;
+		}
+		else
+		{
+			// update the text line and segment widths,
+			TextRegionLine& segment = m_activeTextRegion->textRegionLines.back().segments.back();
+			segment.width = movedGlyphPoint.x() - segment.baseOrigin.x();
+			segment.glyphIndex = _glyphs.size() - 1;
+			m_activeTextRegion->textRegionLines.back().width = movedGlyphPoint.x() - m_activeTextRegion->textRegionLines.back().baseOrigin.x();
+		}
+		m_activeTextRegion->_lastXY = movedGlyphPoint;
+	}
+}
+
