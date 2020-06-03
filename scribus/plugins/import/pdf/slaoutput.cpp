@@ -4043,7 +4043,7 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 		//m_activeTextRegion->glyphs.push_back(new_glyph);
 
 		//at the moment a new segment only gets added when the line is created. a new segment should also get added if there's any change in style or layout etc...but that feature can be added llater, it's not needed for basic textframe support with no style.
-		 m_activeTextRegion->textRegionLines.back().glyphIndex = _glyphs.size() - 1;
+		 m_activeTextRegion->textRegionLines.back().glyphIndex = m_glyphs.size() - 1;
 		if (m_activeTextRegion->textRegionLines.back().segments.empty())
 		{
 			// add a new segment
@@ -4067,7 +4067,7 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 			// update the text line and segment widths,
 			TextRegionLine& segment = m_activeTextRegion->textRegionLines.back().segments.back();
 			segment.width = movedGlyphPoint.x() - segment.baseOrigin.x();
-			segment.glyphIndex = _glyphs.size() - 1;
+			segment.glyphIndex = m_glyphs.size() - 1;
 			m_activeTextRegion->textRegionLines.back().width = movedGlyphPoint.x() - m_activeTextRegion->textRegionLines.back().baseOrigin.x();
 		}
 		m_activeTextRegion->_lastXY = movedGlyphPoint;
