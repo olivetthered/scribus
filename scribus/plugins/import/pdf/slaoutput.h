@@ -167,6 +167,30 @@ struct PdfGlyph {
 	bool is_space;
 };
 
+
+class TextRegionLine
+{
+public:
+	qreal maxHeight = -1;
+	qreal modeHeigth = -1;
+	qreal width = -1;
+	uint glyphIndex;
+	QPointF baseOrigin = QPointF(-1, -1);
+	std::vector<TextRegionLine> segments = std::vector<TextRegionLine>();
+
+};
+
+class TextRegion {
+public:
+	QPointF textRegioBasenOrigin = QPointF(-1, -1);
+	qreal maxHeight = -1;
+	qreal modeHeigth = -1;
+	std::vector<TextRegionLine> textRegionLines = std::vector<TextRegionLine>();
+	qreal maxWidth = -1;
+	QPointF _lineBaseXY = QPointF(-1, -1); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
+	QPointF _lastXY = QPointF(-1, -1);
+};
+
 class SlaOutputDev : public OutputDev
 {
 public:
