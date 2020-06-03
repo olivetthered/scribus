@@ -1,7 +1,9 @@
 build/
 
 .svn
+*.svn-base
 *.db
+*.db-journal
 win32/msvc2019/.vs/Scribus/v16/.suo
 *.opendb
 *.ipch
