@@ -189,6 +189,7 @@ public:
 	qreal maxWidth = -1;
 	QPointF _lineBaseXY = QPointF(-1, -1); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
 	QPointF _lastXY = QPointF(-1, -1);
+	void renderToTextFrame(std::vector<PdfGlyph>& glyphs, PageItem* text_node, ParagraphStyle& pStyle);
 };
 
 class AddCharInterface
@@ -369,6 +370,8 @@ private:
 	void setFillAndStrokeForPDF(GfxState* state, PageItem* text_node);
 	void updateTextPos(GfxState* state) override;
 	void renderTextFrame();
+
+	void finishItem(PageItem* item);
 
 	bool pathIsClosed {false};
 	QString CurrColorFill;
