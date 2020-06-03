@@ -269,6 +269,7 @@ public:
 	void endMarkedContent(GfxState *state) override;
 	void markPoint(POPPLER_CONST char *name) override;
 	void markPoint(POPPLER_CONST char *name, Dict *properties) override;
+	
 
 	//----- image drawing
 	void drawImageMask(GfxState *state, Object *ref, Stream *str, int width, int height, GBool invert, GBool interpolate, GBool inlineImg) override;
@@ -299,7 +300,8 @@ public:
 
 	void updateFillColor(GfxState *state) override;
 	void updateStrokeColor(GfxState *state) override;
-	void updateFont(GfxState *state) override;
+	void updateFontForVector(GfxState* state);
+	bool m_import_text_as_vectors = true;
 
 	//----- text drawing
 	void  beginTextObject(GfxState *state) override;
@@ -352,6 +354,8 @@ private:
 	bool linearTest(QPointF point, bool xInLimits, bool yInLimits);
 	void moveToPoint(QPointF newPoint);
 	void addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
+	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
+	void setFillAndStrokeForPDF(GfxState* state, PageItem* text_node);
 
 	bool pathIsClosed {false};
 	QString CurrColorFill;
@@ -423,6 +427,8 @@ private:
 	TextRegion *m_activeTextRegion = NULL;
 	std::vector<PdfGlyph> m_glyphs; //this may replace some of the other settings or it may not, certainly not font as text gets flushed if the font changes
 
+	//PDF Text import
+	QPoint m_text_position = QPoint(0,0);
 };
 
 #endif
