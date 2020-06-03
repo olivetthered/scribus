@@ -3330,11 +3330,11 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 				}
 				if ((textPath.size() > 3) && ((wh.x() != 0.0) || (wh.y() != 0.0)) && (textRenderingMode != 7))
 				{
-					PageItem* text_node = nullptr;
+					PageItem* textNode = nullptr;
 
 
 					int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
-					text_node = m_doc->Items->at(z);
+					textNode = m_doc->Items->at(z);
 
 					// todo: merge this between vector and text implementations.
 
@@ -3343,15 +3343,15 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 					mm.translate(x, -y);
 					textPath.map(mm);
 					textPath.map(m_ctm);
-					text_node->PoLine = textPath.copy();
-					setFillAndStrokeForPDF(state, text_node);
+					textNode->PoLine = textPath.copy();
+					setFillAndStrokeForPDF(state, textNode);
 					// Fill text rendering modes. See above
-					m_doc->adjustItemSize(text_node);
-					m_Elements->append(text_node);
+					m_doc->adjustItemSize(textNode);
+					m_Elements->append(textNode);
 					if (m_groupStack.count() != 0)
 					{
-						m_groupStack.top().Items.append(text_node);
-						applyMask(text_node);
+						m_groupStack.top().Items.append(textNode);
+						applyMask(textNode);
 					}
 				}
 				delete fontPath;
@@ -3435,6 +3435,19 @@ void SlaOutputDev::beginTextObject(GfxState *state)
 
 void SlaOutputDev::endTextObject(GfxState *state)
 {
+
+	if (importTextAsVectors == false && m_activeTextRegion->_lastXY != QPointF(-1, -1)) {
+		// Add the last glyph to the textregion
+		addGlyphAtPoint(glyphs.back().position, glyphs.back());
+		renderTextFrame();
+		delete m_activeTextRegion;
+		//Create and initilize a new TextRegion
+
+		m_activeTextRegion = new TextRegion();
+	}
+
+	delete addChar;
+	addChar = new AddFirstChar(this);
 //	qDebug() << "SlaOutputDev::endTextObject";
 	if (!m_clipTextPath.isEmpty())
 	{
@@ -3458,7 +3471,12 @@ void SlaOutputDev::endTextObject(GfxState *state)
 			else
 				ite = gElements.Items.first();
 			ite->setGroupClipping(false);
-			ite->setFillTransparency(1.0 - state->getFillOpacity());
+			if (importTextAsVectors == false) {
+				ite->setFillTransparency(1.0);
+			}
+			else {
+				ite->setFillTransparency(1.0 - state->getFillOpacity());
+			}
 			ite->setFillBlendmode(getBlendMode(state));
 			for (int as = 0; as < tmpSel->count(); ++as)
 			{
@@ -4096,13 +4114,25 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 	}
 }
 
-void SlaOutputDev::setFillAndStrokeForPDF(GfxState* state, PageItem* text_node) {
+void TextRegion::renderToTextFrame(std::vector<PdfGlyph>& glyphs, PageItem* textNode, ParagraphStyle& pStyle)
+{
+	// nothing clever, just get all the body text in one lump and update the text frame
+	textNode->setWidthHeight(this->maxWidth, this->maxHeight);
+	QString bodyText = "";
+	for (int glyphIndex = this->textRegionLines.begin()->glyphIndex; glyphIndex <= this->textRegionLines.end()->segments.end()->glyphIndex; glyphIndex++) {
+		bodyText += glyphs[glyphIndex].code;
+	}
+	textNode->itemText.insertChars(bodyText);
+	textNode->frameTextEnd();
+}
 
-	text_node->ClipEdited = true;
-	text_node->FrameType = 3;
-	text_node->setLineEnd(PLineEnd);
-	text_node->setLineJoin(PLineJoin);
-	text_node->setTextFlowMode(PageItem::TextFlowDisabled);
+void SlaOutputDev::setFillAndStrokeForPDF(GfxState* state, PageItem* textNode) {
+
+	textNode->ClipEdited = true;
+	textNode->FrameType = 3;
+	textNode->setLineEnd(PLineEnd);
+	textNode->setLineJoin(PLineJoin);
+	textNode->setTextFlowMode(PageItem::TextFlowDisabled);
 
 	int textRenderingMode = state->getRender();
 	// Invisible or only used for clipping
@@ -4113,42 +4143,42 @@ void SlaOutputDev::setFillAndStrokeForPDF(GfxState* state, PageItem* text_node) 
 	{
 
 		CurrColorFill = getColor(state->getFillColorSpace(), state->getFillColor(), &CurrFillShade);
-		if (text_node->isTextFrame()) { //fill colour sets the background colour for the frame not the fill colour fore  the text			
-			text_node->setFillTransparency(1.0 - (state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity()));
-			text_node->setLineTransparency(1.0); // this ssets the transparency of the textbox border and we don't want to see it			
-			text_node->setFillColor(CommonStrings::None);
-			text_node->setLineColor(CommonStrings::None);
-			text_node->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
-			text_node->setFillShade(CurrFillShade);
+		if (textNode->isTextFrame()) { //fill colour sets the background colour for the frame not the fill colour fore  the text			
+			textNode->setFillTransparency(1.0 - (state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity()));
+			textNode->setLineTransparency(1.0); // this ssets the transparency of the textbox border and we don't want to see it			
+			textNode->setFillColor(CommonStrings::None);
+			textNode->setLineColor(CommonStrings::None);
+			textNode->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
+			textNode->setFillShade(CurrFillShade);
 		}
 		else {
-			text_node->setFillColor(CurrColorFill);
-			text_node->setFillShade(CurrFillShade);
-			text_node->setFillEvenOdd(false);
-			text_node->setFillTransparency(1.0 - state->getFillOpacity());
-			text_node->setFillBlendmode(getBlendMode(state));
+			textNode->setFillColor(CurrColorFill);
+			textNode->setFillShade(CurrFillShade);
+			textNode->setFillEvenOdd(false);
+			textNode->setFillTransparency(1.0 - state->getFillOpacity());
+			textNode->setFillBlendmode(getBlendMode(state));
 		}
 	}
 	// Stroke text rendering modes. See above
 	if (textRenderingMode == 1 || textRenderingMode == 2 || textRenderingMode == 5 || textRenderingMode == 6)
 	{
 		CurrColorStroke = getColor(state->getStrokeColorSpace(), state->getStrokeColor(), &CurrStrokeShade);
-		if (text_node->isTextFrame()) { //fil;l colour sets the background colour for the frame not the fill colour fore  the text			
-			text_node->setFillTransparency(1.0 - (state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity()));
-			text_node->setLineTransparency(1.0); // this sets the transparency of the textbox border and we don't want to see it			
-			text_node->setFillColor(CommonStrings::None); //TODO: Check if we ov erride the stroke colour with the fil,l colour when threre is a choice
-			text_node->setLineColor(CommonStrings::None);
-			text_node->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
-			text_node->setFillBlendmode(getBlendMode(state));
-			text_node->setFillShade(CurrFillShade);
+		if (textNode->isTextFrame()) { //fil;l colour sets the background colour for the frame not the fill colour fore  the text			
+			textNode->setFillTransparency(1.0 - (state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity()));
+			textNode->setLineTransparency(1.0); // this sets the transparency of the textbox border and we don't want to see it			
+			textNode->setFillColor(CommonStrings::None); //TODO: Check if we ov erride the stroke colour with the fil,l colour when threre is a choice
+			textNode->setLineColor(CommonStrings::None);
+			textNode->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
+			textNode->setFillBlendmode(getBlendMode(state));
+			textNode->setFillShade(CurrFillShade);
 		}
 		else {
-			text_node->setLineColor(CurrColorStroke);
-			text_node->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
-			text_node->setFillTransparency(1.0 - state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity());
-			text_node->setLineTransparency(1.0); // this sets the transparency of the textbox border and we don't want to see it
-			text_node->setLineBlendmode(getBlendMode(state));
-			text_node->setLineShade(CurrStrokeShade);
+			textNode->setLineColor(CurrColorStroke);
+			textNode->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
+			textNode->setFillTransparency(1.0 - state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity());
+			textNode->setLineTransparency(1.0); // this sets the transparency of the textbox border and we don't want to see it
+			textNode->setLineBlendmode(getBlendMode(state));
+			textNode->setLineShade(CurrStrokeShade);
 		}
 	}
 }
@@ -4180,6 +4210,154 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 void SlaOutputDev::renderTextFrame()
 {
 	//TODO: Implement, this should all be based on tyhe framework and using m_activeTextRegion
+	qDebug() << "_flushText()    m_doc->currentPage()->xOffset():" << m_doc->currentPage()->xOffset();
+	// Ignore empty strings
+	if (glyphs.empty()) {
+		// We don't clear the glyphs any more or at least until the whole page has been rendred glyphs.clear();
+		return;
+	}
+
+	//TODO: Look this up using the framework
+	const PdfGlyph& first_glyph = glyphs[0];// (*i);
+	// TODO: Use the framework for this, not currently supported
+	/*
+	int render_mode = first_glyph.render_mode;
+	// Ignore invisible characters
+	if (render_mode == 3) {
+		// We don't clear the glyphs any more or at least until the whole page has been rendred //_glyphs.clear();
+		return;
+	}
+	*/
+
+	qreal xCoor = m_doc->currentPage()->xOffset() + (double)first_glyph.position.x();
+	qreal yCoor = m_doc->currentPage()->initialHeight() - (m_doc->currentPage()->yOffset() + (double)first_glyph.position.y()); // don't know if y is top down or bottom up
+	double  lineWidth = 0.0;
+	/* colours don't get reset to CommonStrings::None often enough.*/
+	int z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Rectangle, xCoor, yCoor, 40, 40, 0, CommonStrings::None, CommonStrings::None /* this->CurrColorStroke*/);//, PageItem::ItemKind::InlineItem);
+	PageItem* textNode = m_doc->Items->at(z);
+
+	ParagraphStyle& pStyle = (ParagraphStyle&)textNode->itemText.defaultStyle();
+	// set some hackish parameters up at first, line spacing can be calculated from the cursor position changes
+	pStyle.setLineSpacingMode(pStyle.AutomaticLineSpacing);
+	pStyle.setHyphenationMode(pStyle.AutomaticHyphenation);
+
+
+	// TODO: Implement thease using the framework
+	finishItem(textNode);
+	// FIXME: Implement thease using the framework
+	//_setFillAndStrokeForPdf(state, text_node);
+	//FIXME: Here's some dummy code for now with sednsible defaults, looks like state wasn't even needed
+	if (true)
+	{
+		textNode->ClipEdited = true;
+		textNode->FrameType = 3;
+		textNode->setLineEnd(PLineEnd);
+		textNode->setLineJoin(PLineJoin);
+		textNode->setTextFlowMode(PageItem::TextFlowDisabled);
+
+		textNode->setFillTransparency(1.0);
+		textNode->setLineTransparency(1.0); // this ssets the transparency of the textbox border and we don't want to see it			
+		textNode->setFillColor(CommonStrings::None);
+		textNode->setLineColor(CommonStrings::None);
+		textNode->setLineWidth(0);//line  width doesn't effect drawing text, it creates a bounding box state->getTransformedLineWidth());
+		textNode->setFillShade(CurrFillShade);
+	}
+
+
+	// Set text matrix... This need to be done so that the globaal world view that we rite out glyphs to is transformed correctly by the context matrix for each glyph, possibly anyhow.
+	/* FIXME: Setting the text matrix isn't supp;orted at the moment 
+	QTransform text_transform(_text_matrix);
+	text_transform.setMatrix(text_transform.m11(), text_transform.m12(), 0,
+		text_transform.m21(), text_transform.m22(), 0,
+		first_glyph.position.x(), first_glyph.position.y(), 1);
+		*/
+	/* todo, set the global transform
+	gchar *transform = sp_svg_transform_write(text_transform);
+	text_node->setAttribute("transform", transform);
+	g_free(transform);
+	*/
+	/*set the default charstyle to the style of the glyph, this needss fleshing out a little */
+
+	int shade = 100;
+	//TODO: This needs to come from the framework
+	//QString CurrColorText = getColor(state->getFillColorSpace(), state->getFillColor(), &shade);
+	//TODO: replace this with the framework
+	//applyTextStyleToCharStyle(pStyle.charStyle(), _glyphs[0].style->getFont().family(), CurrColorText, _glyphs[0].style->getFont().pointSizeF());// *_font_scaling);
+	textNode->invalid = true;
+	CharStyle& cStyle = (CharStyle&)pStyle.charStyle();
+	cStyle.setScaleH(1000.0);
+	cStyle.setScaleV(1000.0);
+	cStyle.setHyphenChar(SpecialChars::BLANK.unicode());
+
+	//text_node->itemText.setDefaultStyle(pStyle);
+	//FIXME: replace this with the framework
+	m_activeTextRegion->renderToTextFrame(glyphs, textNode, pStyle);
+	//parseText(glyphs, text_node, pStyle);
+	//FIXME: Paragraphs need to be implemented properly  this needs to be applied to the charstyle of the default pstyle
+	textNode->itemText.insertChars(SpecialChars::PARSEP, true);
+
+	//Set the shape so we don't clip all the text away.
+	FPointArray boundingBoxShape;
+	boundingBoxShape.resize(0);
+	boundingBoxShape.svgInit();
+
+	double bbosdoubles[32] = { 0,0
+							,0,0
+							,100,0
+							,100,0
+							,100,0
+							,100,0
+							,100,100
+							,100,100
+							,100,100
+							,100,100
+							,0,100
+							,0,100
+							,0,100
+							,0,100
+							,0,0
+							,0,0
+	};
+	boundingBoxShape.svgMoveTo(bbosdoubles[0], bbosdoubles[1]);
+	for (int a = 0; a < 16; a += 2)
+	{
+		boundingBoxShape.append(FPoint(bbosdoubles[a * 2], bbosdoubles[a * 2 + 1]));
+	}
+	boundingBoxShape.scale(textNode->width() / 100.0, textNode->height() / 100.0);
+
+	textNode->SetFrameShape(32, bbosdoubles);
+	textNode->ContourLine = textNode->PoLine.copy();
+
+	m_doc->Items->removeLast();
+	m_Elements->append(textNode);
+	if (m_groupStack.count() != 0)
+	{
+		m_groupStack.top().Items.append(textNode);
+		applyMask(textNode);
+	}
+
+}
+
+/*code mostly taken from importodg.cpp which also supports some line styles and more fill options etc...*/
+//FIXME: This needs to be implemented based on the framework
+void SlaOutputDev::finishItem(PageItem* item) {
+	item->ClipEdited = true;
+	item->FrameType = 3;
+
+	//this requires that PoLine is set
+	//FPoint wh = getMaxClipF(&item->PoLine);
+	//item->setWidthHeight(wh.x(), wh.y());
+	//item->Clip = flattenPath(item->PoLine, item->Segments);
+	item->OldB2 = item->width();
+	item->OldH2 = item->height();
+	item->updateClip();
+	item->OwnPage = m_doc->OnPage(item);
+
+	//item->setFillTransparency(1.0 - state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity());
+	//item->setLineTransparency(1.0);
+
+	//item->setStartArrowIndex(0);
+	//item->setEndArrowIndex(0);
 }
 
 
