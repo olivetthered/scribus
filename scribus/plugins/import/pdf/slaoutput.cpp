@@ -4180,3 +4180,41 @@ void SlaOutputDev::setFillAndStrokeForPDF(GfxState* state, PageItem* text_node) 
 	}
 }
 
+/**
+ * \brief Updates current text position
+ */
+void SlaOutputDev::updateTextPos(GfxState* state) {
+	qDebug() << "updateTextPos()";
+
+	QPointF new_position = QPointF(state->getCurX(), state->getCurY());
+	//TODO: Implement this in the framework when new_position indicates a new text region should be created.
+	if (m_glyphs.empty())
+	{
+		//FIXME: Actually put this in the correct class	
+			//QPointF textRegionOrigin = new_position;
+		m_activeTextRegion->textRegioBasenOrigin = new_position;
+	}
+	else
+	{
+		// a delayed call using the last glyph that was put onto the stack. it will be a glyph situated on the far side bounds of the text region
+		addGlyphAtPoint(m_glyphs.back().position, m_glyphs.back());
+	}
+	//FIXME: I think _moveToPoint should do some of this. actually the first time innitialization is needed
+	if (m_activeTextRegion->_lineBaseXY == QPointF(-1, -1)) {
+		m_activeTextRegion->_lineBaseXY = new_position;
+	}
+	if (m_activeTextRegion->_lastXY == QPointF(-1, -1))
+	{
+		m_activeTextRegion->_lastXY = new_position;
+	}
+	moveToPoint(new_position);
+	//TODO: See if text position is still needed
+	m_text_position = new_position;
+	/* TODO: Implement this in the framework
+	QPointF d = QPointF(abs(m_text_position.x() - new_position.x()), new_position.y() - m_text_position.y());
+	
+	if (_in_text_object && d.x() > 10 && d.y() > 10) {
+		_flushText(state);
+	}
+	*/
+}

@@ -356,6 +356,7 @@ private:
 	void addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
 	void setFillAndStrokeForPDF(GfxState* state, PageItem* text_node);
+	void updateTextPos(GfxState* state) override;
 
 	bool pathIsClosed {false};
 	QString CurrColorFill;
@@ -428,7 +429,7 @@ private:
 	std::vector<PdfGlyph> m_glyphs; //this may replace some of the other settings or it may not, certainly not font as text gets flushed if the font changes
 
 	//PDF Text import
-	QPoint m_text_position = QPoint(0,0);
+	QPointF m_text_position = QPointF(0,0);
 };
 
 #endif
