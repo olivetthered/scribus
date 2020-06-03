@@ -301,7 +301,7 @@ public:
 	void updateFillColor(GfxState *state) override;
 	void updateStrokeColor(GfxState *state) override;
 	void updateFontForVector(GfxState* state);
-	bool m_import_text_as_vectors = true;
+	bool importTextAsVectors;
 
 	//----- text drawing
 	void  beginTextObject(GfxState *state) override;
