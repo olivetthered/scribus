@@ -283,6 +283,7 @@ SlaOutputDev::SlaOutputDev(ScribusDoc* doc, QList<PageItem*> *Elements, QStringL
 	importerFlags = flags;
 	currentLayer = m_doc->activeLayer();
 	layersSetByOCG = false;
+	importTextAsVectors - true;
 }
 
 SlaOutputDev::~SlaOutputDev()
@@ -3314,7 +3315,7 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 			FPointArray textPath;
 			textPath.fromQPainterPath(qPath);
 			FPoint wh = textPath.widthHeight();
-			if (m_import_text_as_vectors) {
+			if (importTextAsVectors) {
 				qDebug() << "drawChar() ";
 
 				if (textRenderingMode > 3)
@@ -3354,7 +3355,7 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 				delete fontPath;
 			}
 		}
-		if (!m_import_text_as_vectors) { // donm't render the char as vectors add it to an array so it can be rendred as a string
+		if (!importTextAsVectors) { // donm't render the char as vectors add it to an array so it can be rendred as a string
 			addChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
 		}
 	}
@@ -3363,6 +3364,8 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 GBool SlaOutputDev::beginType3Char(GfxState *state, double x, double y, double dx, double dy, CharCode code, POPPLER_CONST_082 Unicode *u, int uLen)
 {
 //	qDebug() << "beginType3Char";
+	if (importTextAsVectors == false)
+		return gTrue;
 	GfxFont *gfxFont;
 	if (!(gfxFont = state->getFont()))
 		return gTrue;
@@ -3378,6 +3381,8 @@ GBool SlaOutputDev::beginType3Char(GfxState *state, double x, double y, double d
 void SlaOutputDev::endType3Char(GfxState *state)
 {
 //	qDebug() << "endType3Char";
+	if (importTextAsVectors == false)
+		return;
 	F3Entry f3e = m_F3Stack.pop();
 	groupEntry gElements = m_groupStack.pop();
 	m_doc->m_Selection->clear();
