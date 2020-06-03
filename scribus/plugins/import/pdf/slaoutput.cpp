@@ -284,6 +284,8 @@ SlaOutputDev::SlaOutputDev(ScribusDoc* doc, QList<PageItem*> *Elements, QStringL
 	currentLayer = m_doc->activeLayer();
 	layersSetByOCG = false;
 	importTextAsVectors - true;
+	//FIXME: can probably have an array of these instead of creting new ones and deleting them
+	addChar = new AddFirstChar(this);
 }
 
 SlaOutputDev::~SlaOutputDev()
@@ -3328,7 +3330,7 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 				}
 				if ((textPath.size() > 3) && ((wh.x() != 0.0) || (wh.y() != 0.0)) && (textRenderingMode != 7))
 				{
-					PageItem* text_node = NULL;
+					PageItem* text_node = nullptr;
 
 
 					int z = m_doc->itemAdd(PageItem::Polygon, PageItem::Unspecified, xCoor, yCoor, 10, 10, 0, CommonStrings::None, CommonStrings::None);
@@ -3355,8 +3357,8 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 				delete fontPath;
 			}
 		}
-		if (!importTextAsVectors) { // donm't render the char as vectors add it to an array so it can be rendred as a string
-			addChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
+		if (!importTextAsVectors) { // donm't render the char as vectors add it to an array so it can be rendred as a string			
+			addChar->addChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
 		}
 	}
 }
@@ -4009,21 +4011,23 @@ void SlaOutputDev::moveToPoint(QPointF newPoint)
 	// if nothing can be done then write out the textregioin and delete it and create a new trextrext and re-adcfd ther char, set the pos etc...
 	if (pass == false)
 	{
-		//FIXME: ... there should actually be a vector of these because we don't want to delete them
-		//TODO: _flushText();pdf
-		//TODO: render the m_activeTextRegion
+		
+
+		// redner the textframe
 		renderTextFrame();
+		//FIXME:  there should actually be a vector of these because we don't want to delete them
 		delete m_activeTextRegion;
 		//Create and initilize a new TextRegion
 
 		m_activeTextRegion = new TextRegion();
-		//if (m_glyphs.size() == 0)
-		//{
-		
+		delete addChar;
+		addChar = new AddFirstChar(this);
+
+		/*TOPDO: DXo we need to initlize thease
 		m_activeTextRegion->textRegioBasenOrigin = newPoint;
-		//}
 		m_activeTextRegion->_lineBaseXY = newPoint;
 		m_activeTextRegion->_lastXY = newPoint;
+		*/
 	}
 }
 
@@ -4044,17 +4048,24 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 
 	// if nothing can be done then write out the textregioin and delete it and create a new trextrext and re-adcfd ther char, set the pos etc...
 	if (pass == false) {
-		//TODO: _flushText();  the textregion should get written out to scribus here, or alternativlty. instead of deleting it keep all the textregions in a vector and update scribus at the end. this may have better performance as the code footprint will in two smalkler bits instead of one large bit so cpu cache may be able to manage more
+
+		renderTextFrame();
+		// FIXME: There should be an arracy of thease and they should all be rendered at the end instead of rendering them as one offs and deleting them all the time
 		delete m_activeTextRegion;
-		m_activeTextRegion = new TextRegion();//TODO: newGlyphPoint);
-		//TODO: initialize m_activeTextRegion based on newGlyphPoint and new_glyph
+		//Create and initilize a new TextRegion
+		m_activeTextRegion = new TextRegion();
+
+		//initialize m_activeTextRegion based on newGlyphPoint and new_glyph
+		addGlyphAtPoint(newGlyphPoint, new_glyph);
+		delete addChar;
+		addChar = new AddBasicChar(this);
 	}
 	else {
 		//TODO: possible don't store the glyphs on the textRegion, well certainly not like this, we only need to check bounbdry and feature positions
 		//m_activeTextRegion->glyphs.push_back(new_glyph);
 
 		//at the moment a new segment only gets added when the line is created. a new segment should also get added if there's any change in style or layout etc...but that feature can be added llater, it's not needed for basic textframe support with no style.
-		m_activeTextRegion->textRegionLines.back().glyphIndex = m_glyphs.size() - 1;
+		m_activeTextRegion->textRegionLines.back().glyphIndex = glyphs.size() - 1;
 		if (m_activeTextRegion->textRegionLines.back().segments.empty())
 		{
 			// add a new segment
@@ -4078,65 +4089,11 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 			// update the text line and segment widths,
 			TextRegionLine& segment = m_activeTextRegion->textRegionLines.back().segments.back();
 			segment.width = movedGlyphPoint.x() - segment.baseOrigin.x();
-			segment.glyphIndex = m_glyphs.size() - 1;
+			segment.glyphIndex = glyphs.size() - 1;
 			m_activeTextRegion->textRegionLines.back().width = movedGlyphPoint.x() - m_activeTextRegion->textRegionLines.back().baseOrigin.x();
 		}
 		m_activeTextRegion->_lastXY = movedGlyphPoint;
 	}
-}
-
-/**
- * \brief Adds the specified character to the text buffer
- * Takes care of converting it to UTF-8 and generates a new style repr if style
- * has changed since the last call.
- */
-void SlaOutputDev::addChar(GfxState* state, double x, double y,
-	double dx, double dy,
-	double originX, double originY,
-	CharCode code, int nBytes, Unicode const* u, int uLen) {
-	qDebug() << "addChar() '" << u << " : " << uLen;
-	// TODO: Compleatly gut this function so all that it ends up doing is placing a character and some positioning information on a stack get rid of all the other junk as it's not needed
-
-	bool is_space = (uLen == 1 && u[0] == 32);
-	// Skip beginning space
-	if (is_space && m_glyphs.empty()) {
-		QPoint delta(dx, dy);
-		m_text_position += delta;
-		return;
-	}
-	// Allow only one space in a row
-	if (is_space &&
-		(m_glyphs[m_glyphs.size() - 1].code == QChar::SpecialCharacter::Space)) {
-		QPoint delta(dx, dy);
-		m_text_position += delta;
-		return;
-	}
-
-	PdfGlyph new_glyph;
-	new_glyph.is_space = is_space;
-	new_glyph.position = QPoint(x - originX, y - originY);
-	//TODO:work out if this is still needed
-	//new_glyph.text_position = m_text_position;
-	new_glyph.dx = dx;
-	new_glyph.dy = dy;
-	//TODO: This only need to be called for the very first point, replace with an abstract version of addchar that does this for brand new textregions so there's no need to record dx or dy or check is glyphs is empty or empty glyphs
-	if (m_glyphs.empty())
-	{
-		addGlyphAtPoint(QPointF(x, y), new_glyph);
-	}
-	//TODO:work out if this is still needed
-	QPoint delta(dx, dy);
-	m_text_position += delta;
-
-	// Convert the character to UTF-16 since that's our SVG document's encoding
-	{
-		for (int i = 0; i < uLen; i++) {
-			new_glyph.code += (char16_t)u[i];
-		}
-	}
-
-	new_glyph.rise = state->getRise();
-	m_glyphs.push_back(new_glyph);
 }
 
 void SlaOutputDev::setFillAndStrokeForPDF(GfxState* state, PageItem* text_node) {
@@ -4214,7 +4171,7 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 	else
 	{
 		// a delayed call using the last glyph that was put onto the stack. it will be a glyph situated on the far side bounds of the text region
-		addGlyphAtPoint(m_glyphs.back().position, m_glyphs.back());
+		addGlyphAtPoint(glyphs.back().position, glyphs.back());
 	}
 
 	moveToPoint(new_position);
@@ -4223,4 +4180,74 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 void SlaOutputDev::renderTextFrame()
 {
 	//TODO: Implement, this should all be based on tyhe framework and using m_activeTextRegion
+}
+
+
+void AddFirstChar::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
+{
+	qDebug() << "addChar() '" << u << " : " << uLen;	
+	bool is_space = (uLen == 1 && u[0] == 32);
+	// Skip beginning space
+	if (is_space) {
+		return;
+	}
+
+	PdfGlyph new_glyph;
+	new_glyph.is_space = false;
+	new_glyph.position = QPoint(x - originX, y - originY);
+	new_glyph.dx = dx;
+	new_glyph.dy = dy;
+
+	//FIXME: have an array of differnt types of addchar class instead of creating and destroying them all the time
+	delete m_slaOutputDev->addChar;
+	m_slaOutputDev->addChar = new AddBasicChar(m_slaOutputDev);
+
+	//only need to be called for the very first point
+	m_slaOutputDev->addGlyphAtPoint(QPointF(x, y), new_glyph);
+
+	// Convert the character to UTF-16 since that's our SVG document's encoding	
+	for (int i = 0; i < uLen; i++) {
+		new_glyph.code += (char16_t)u[i];
+	}
+	
+	new_glyph.rise = state->getRise();
+	m_slaOutputDev->glyphs.push_back(new_glyph);
+
+}
+
+void AddBasicChar::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
+{
+	qDebug() << "addChar() '" << u << " : " << uLen;
+	// TODO: Compleatly gut this function so all that it ends up doing is placing a character and some positioning information on a stack get rid of all the other junk as it's not needed
+
+	bool is_space = (uLen == 1 && u[0] == 32);
+
+	// Allow only one space in a row
+	if (is_space &&
+		(m_slaOutputDev->glyphs[m_slaOutputDev->glyphs.size() - 1].code == QChar::SpecialCharacter::Space)) {
+		return;
+	}
+
+	PdfGlyph new_glyph;
+	new_glyph.is_space = is_space;
+	new_glyph.position = QPoint(x - originX, y - originY);
+	new_glyph.dx = dx;
+	new_glyph.dy = dy;
+
+	// Convert the character to UTF-16 since that's our SVG document's encoding
+
+	for (int i = 0; i < uLen; i++) {
+		new_glyph.code += (char16_t)u[i];
+	}
+
+	new_glyph.rise = state->getRise();
+	m_slaOutputDev->glyphs.push_back(new_glyph);
+}
+
+void AddCharWithPreviousStyle::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
+{
+}
+
+void AddCharWithNewStyle::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
+{
 }

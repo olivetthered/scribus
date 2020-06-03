@@ -191,6 +191,13 @@ public:
 	QPointF _lastXY = QPointF(-1, -1);
 };
 
+class AddCharInterface
+{
+public:
+	// Pure Virtual Function 
+	virtual void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) = 0;
+};
+
 class SlaOutputDev : public OutputDev
 {
 public:
@@ -312,6 +319,11 @@ public:
 	void  type3D0(GfxState * /*state*/, double /*wx*/, double /*wy*/) override;
 	void  type3D1(GfxState * /*state*/, double /*wx*/, double /*wy*/, double /*llx*/, double /*lly*/, double /*urx*/, double /*ury*/) override;
 
+	//text as text
+	void addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
+	std::vector<PdfGlyph> glyphs; //this may replace some of the other settings or it may not, certainly not font as text gets flushed if the font changes
+	AddCharInterface* addChar = nullptr;
+
 	//----- form XObjects
 	void drawForm(Ref /*id*/) override { qDebug() << "Draw Form"; }
 
@@ -352,9 +364,8 @@ private:
 	bool adjunctLesser(qreal testY, qreal lastY, qreal baseY);
 	bool adjunctGreater(qreal testY, qreal lastY, qreal baseY);
 	bool linearTest(QPointF point, bool xInLimits, bool yInLimits);
-	void moveToPoint(QPointF newPoint);
-	void addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
-	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
+	void moveToPoint(QPointF newPoint);	
+	//void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
 	void setFillAndStrokeForPDF(GfxState* state, PageItem* text_node);
 	void updateTextPos(GfxState* state) override;
 	void renderTextFrame();
@@ -426,11 +437,61 @@ private:
 	int m_actPage;
 
 	//PDF Textbox framework
-	TextRegion *m_activeTextRegion = NULL;
-	std::vector<PdfGlyph> m_glyphs; //this may replace some of the other settings or it may not, certainly not font as text gets flushed if the font changes
+	TextRegion *m_activeTextRegion = nullptr;		
+};
 
-	//PDF Text import
-	QPointF m_text_position = QPointF(0,0);
+class AddFirstChar : public AddCharInterface
+{
+
+public:
+	AddFirstChar(SlaOutputDev *slaOutputDev)
+	{
+		m_slaOutputDev = slaOutputDev;
+	}
+	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
+private:
+	SlaOutputDev* m_slaOutputDev = nullptr;
+};
+
+class AddBasicChar : public AddCharInterface
+{
+
+public:
+	AddBasicChar(SlaOutputDev* slaOutputDev)
+	{
+		m_slaOutputDev = slaOutputDev;
+	}
+	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
+private:
+	SlaOutputDev* m_slaOutputDev = nullptr;
+};
+
+// TODO: implement these addchar definitions so that they can handle changes in style, font, text micro positioning, scaling, matrix etc...
+class AddCharWithNewStyle : public AddCharInterface
+{
+
+public:
+	AddCharWithNewStyle(SlaOutputDev* slaOutputDev)
+	{
+		m_slaOutputDev = slaOutputDev;
+	}
+	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
+private:
+	SlaOutputDev* m_slaOutputDev = nullptr;
+};
+
+// TODO: implement these addchar definitions so that they can handle changes in style, font, text micro positioning, scaling, matrix etc...
+class AddCharWithPreviousStyle : public AddCharInterface
+{
+
+public:
+	AddCharWithPreviousStyle(SlaOutputDev* slaOutputDev)
+	{
+		m_slaOutputDev = slaOutputDev;
+	}
+	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
+private:
+	SlaOutputDev* m_slaOutputDev = nullptr;
 };
 
 #endif
