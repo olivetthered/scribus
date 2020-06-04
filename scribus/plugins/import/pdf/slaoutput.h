@@ -174,7 +174,7 @@ public:
 	qreal maxHeight = -1;
 	qreal modeHeigth = -1;
 	qreal width = -1;
-	uint glyphIndex;
+	int glyphIndex = -1;
 	QPointF baseOrigin = QPointF(-1, -1);
 	std::vector<TextRegionLine> segments = std::vector<TextRegionLine>();
 
@@ -365,6 +365,7 @@ private:
 	bool adjunctLesser(qreal testY, qreal lastY, qreal baseY);
 	bool adjunctGreater(qreal testY, qreal lastY, qreal baseY);
 	bool linearTest(QPointF point, bool xInLimits, bool yInLimits);
+	bool isRegionConcurrent(QPointF newPoint);
 	void moveToPoint(QPointF newPoint);	
 	//void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
 	void setFillAndStrokeForPDF(GfxState* state, PageItem* text_node);
