@@ -3259,7 +3259,7 @@ err1:
 
 void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, POPPLER_CONST_082 Unicode* u, int uLen)
 {
-	qDebug() << "SlaOutputDev::drawChar x:" << x << "y:" << y << "dx:" << dx << "dy" << dy << "code:" << code;
+	//qDebug() << "SlaOutputDev::drawChar x:" << x << "y:" << y << "dx:" << dx << "dy" << dy << "code:" << code;
 	//for importing text as glyphs
 	double x1, y1, x2, y2;
 	//if (import_text_as_vectors) {
@@ -3320,7 +3320,7 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 			textPath.fromQPainterPath(qPath);
 			FPoint wh = textPath.widthHeight();
 			if (importTextAsVectors) {
-				qDebug() << "drawChar() ";
+				//qDebug() << "drawChar() ";
 
 				if (textRenderingMode > 3)
 				{
@@ -3922,7 +3922,7 @@ bool SlaOutputDev::checkClip()
 // TODO: remove mutual dependencies and move the render engine into it's own cc and header files because it's getting hard to navigate the code base.
 // PDF never deviates from the line when it comes to colenear
 bool SlaOutputDev::coLinera(qreal a, qreal b) {
-	return a == b ? true : false;
+	return abs(a - b) < 1 ? true : false;
 }
 
 // like _colenia but we allow a deviation of upto +-2 rejion font text widths
@@ -4021,13 +4021,28 @@ bool SlaOutputDev::isRegionConcurrent(QPointF newPoint)
 void SlaOutputDev::moveToPoint(QPointF newPoint)
 {
 	// Do some initilization if we are in a new text region
-	if (m_activeTextRegion->_lineBaseXY == QPointF(-1, -1))
+	// we could also update these if glyphindex = -1;
+	if (m_activeTextRegion->_lineBaseXY == QPointF(-1, -1) || m_activeTextRegion->textRegionLines.size() == 0 || m_activeTextRegion->textRegionLines[0].glyphIndex == -1)
 	{
 		m_activeTextRegion->_lineBaseXY = newPoint;
 	}
-	if (m_activeTextRegion->_lastXY == QPointF(-1, -1))
+	if (m_activeTextRegion->_lastXY == QPointF(-1, -1) || m_activeTextRegion->textRegionLines.size() == 0 || m_activeTextRegion->textRegionLines[0].glyphIndex == -1)
 	{
 		m_activeTextRegion->_lastXY = newPoint;
+	}
+	if (m_activeTextRegion->modeHeigth == -1)
+	{
+		// FIXME: do a propper lookup of the height
+		if (m_activeTextRegion->_lastXY.y() < newPoint.y() && m_activeTextRegion->_lastXY.y() > 0)
+		{
+			m_activeTextRegion->modeHeigth = newPoint.y() - m_activeTextRegion->_lastXY.y();
+		}
+		else 
+		{
+			//FIXME: Just initilize modeHeight with anything so that tests don't fail because it's -1
+			//or I could always pass the test if it's -1 which may bew a better idea.
+			m_activeTextRegion->modeHeigth = 10;
+		}
 	}
 	//TODO: I need to write down which ones we want so I can work it all out, for now just some basic fuzzy matching support.
 	bool xInLimits = false;
@@ -4059,7 +4074,7 @@ void SlaOutputDev::moveToPoint(QPointF newPoint)
 			if ((m_activeTextRegion->textRegionLines.size() == 0) || (m_activeTextRegion->textRegionLines.back().glyphIndex != -1)) {
 				m_activeTextRegion->textRegionLines.push_back(textRegionLine);
 			}
-		
+			m_activeTextRegion->_lastXY = newPoint;
 	}
 	// if nothing can be done then write out the textregioin and delete it and create a new trextrext and re-adcfd ther char, set the pos etc...
 	if (pass == false)
@@ -4089,6 +4104,17 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 
 	QPointF movedGlyphPoint = QPointF(newGlyphPoint.x() + new_glyph.dx, newGlyphPoint.y() + new_glyph.dy);
 	//TODO: should  probably be more forgiving when adding a glyph in the x direction because it could be several white spaces skipped
+	if (m_activeTextRegion->modeHeigth == -1)
+	{
+		// FIXME: do a propper lookup of the height
+		m_activeTextRegion->modeHeigth = new_glyph.dx;
+	}
+	if (m_activeTextRegion->_lastXY == QPointF(-1, -1)) {
+		m_activeTextRegion->_lastXY = newGlyphPoint;
+	}
+	if (m_activeTextRegion->_lineBaseXY == QPointF(-1, -1)) {
+		m_activeTextRegion->_lineBaseXY = newGlyphPoint;
+	}
 	bool xInLimits = false;
 	if (closeToX(movedGlyphPoint.x(), m_activeTextRegion->_lastXY.x())) {
 		xInLimits = true;
@@ -4102,7 +4128,10 @@ void SlaOutputDev::addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph) {
 	// if nothing can be done then write out the textregioin and delete it and create a new trextrext and re-adcfd ther char, set the pos etc...
 	if (pass == false) {
 
-		renderTextFrame();
+		if (m_activeTextRegion->textRegionLines.size() > 0)
+		{
+			renderTextFrame();
+		}
 		// FIXME: There should be an arracy of thease and they should all be rendered at the end instead of rendering them as one offs and deleting them all the time
 		delete m_activeTextRegion;
 		//Create and initilize a new TextRegion
@@ -4239,7 +4268,7 @@ void SlaOutputDev::setFillAndStrokeForPDF(GfxState* state, PageItem* textNode) {
  * \brief Updates current text position
  */
 void SlaOutputDev::updateTextPos(GfxState* state) {
-	qDebug() << "updateTextPos()";
+	//qDebug() << "updateTextPos()";
 
 	QPointF new_position = QPointF(state->getCurX(), state->getCurY());
 	//check to see if we are in a new text region
@@ -4248,12 +4277,23 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 	{
 		//FIXME: Actually put this in the correct class	
 		m_activeTextRegion->textRegioBasenOrigin = new_position;
+		// this ahould really get picked up by add first glyph
+		if (glyphs.size() > 0)
+		{
+			addGlyphAtPoint(glyphs.back().position, glyphs.back());
+		}
 
 	}
 	else
 	{
 		// a delayed call using the last glyph that was put onto the stack. it will be a glyph situated on the far side bounds of the text region
-		addGlyphAtPoint(glyphs.back().position, glyphs.back());
+		// only add if we are on a new line
+		// FIXME: closeToX currently always returns true
+		if (closeToY(new_position.y(), glyphs.back().position.y()) && 
+			closeToX(new_position.x(), glyphs.back().position.x()))
+		{
+			addGlyphAtPoint(glyphs.back().position, glyphs.back());
+		}
 	}
 
 	moveToPoint(new_position);
@@ -4262,7 +4302,7 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 void SlaOutputDev::renderTextFrame()
 {
 	//TODO: Implement, this should all be based on tyhe framework and using m_activeTextRegion
-	qDebug() << "_flushText()    m_doc->currentPage()->xOffset():" << m_doc->currentPage()->xOffset();
+	//qDebug() << "_flushText()    m_doc->currentPage()->xOffset():" << m_doc->currentPage()->xOffset();
 	// Ignore empty strings
 	if (glyphs.empty()) {
 		// We don't clear the glyphs any more or at least until the whole page has been rendred glyphs.clear();
@@ -4415,7 +4455,7 @@ void SlaOutputDev::finishItem(PageItem* item) {
 
 void AddFirstChar::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
-	qDebug() << "addChar() '" << u << " : " << uLen;	
+	//qDebug() << "addChar() '" << u << " : " << uLen;	
 	bool is_space = (uLen == 1 && u[0] == 32);
 	// Skip beginning space
 	if (is_space) {
@@ -4424,7 +4464,7 @@ void AddFirstChar::addChar(GfxState* state, double x, double y, double dx, doubl
 
 	PdfGlyph new_glyph;
 	new_glyph.is_space = false;
-	new_glyph.position = QPoint(x - originX, y - originY);
+	new_glyph.position = QPointF(x - originX, y - originY);
 	new_glyph.dx = dx;
 	new_glyph.dy = dy;
 
@@ -4448,7 +4488,7 @@ void AddFirstChar::addChar(GfxState* state, double x, double y, double dx, doubl
 
 void AddBasicChar::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
-	qDebug() << "addChar() '" << u << " : " << uLen;
+	//qDebug() << "addChar() '" << u << " : " << uLen;
 	// TODO: Compleatly gut this function so all that it ends up doing is placing a character and some positioning information on a stack get rid of all the other junk as it's not needed
 
 	bool is_space = (uLen == 1 && u[0] == 32);
