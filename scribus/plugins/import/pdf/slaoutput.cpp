@@ -175,6 +175,7 @@ QString AnoOutputDev::getColor(GfxColorSpace *color_space, POPPLER_CONST_070 Gfx
 	QString fNam;
 	QString namPrefix = "FromPDF";
 	ScColor tmp;
+
 	tmp.setSpotColor(false);
 	tmp.setRegistrationColor(false);
 	*shade = 100;
@@ -3951,21 +3952,23 @@ bool TextRegion::closeToX(qreal x1, qreal x2){
 
 // like _colenia but we allow a deviation of upto 2 rejion font linespaces, but in one direction and half a line space in the other direction
 bool TextRegion::closeToY(qreal y1, qreal y2) {
-	//FIXME: Actually test the correctg magnitudes not the abs value.
-	return abs(y2 - y1) <= modeHeigth * 2 ? true : abs(y1 - y2) <= modeHeigth * 0.5 ? true : false;
+	//FIXME: Actually test the correctg magnitudes not the abs value. There shound be a parameter in the ui to set the matching tollerance
+	return (y2 - y1) >= 0 && y2 - y1 <= lineSpacing * 3 ? true : lineSpacing==-1 ? (y2 - y1) >= 0 && y2 - y1 <= modeHeigth * 5 ? true : false :false;
 }
 
 // lesss than the last y value but bot more than the line spacing less, could also use the base line of the last line to be more accurate
 bool TextRegion::adjunctLesser(qreal testY, qreal lastY, qreal baseY) {
-	return (testY < lastY
-		&& testY >= baseY - modeHeigth
-		&& lastY >= baseY - modeHeigth) ? true : false;
+	return (testY > lastY
+		&& testY <= baseY + lineSpacing
+		&& lastY <= baseY + lineSpacing  
+		&& lineSpacing != -1) ? true : false;
 }
 
 // lesss than the last y value but bot more than the line spacing less, could also use the base line of the last line to be more accurate
 bool TextRegion::adjunctGreater(qreal testY, qreal lastY, qreal baseY) {
-	return (testY > lastY
-		&& lastY <= baseY - modeHeigth  *0.5) ? true : false;
+	return (testY < lastY
+		&& lastY <= baseY - lineSpacing *0.75 
+		&& lineSpacing != -1) ? true : false;
 }
 
 TextRegion::FRAMEWORKLINETESTS TextRegion::linearTest(QPointF point, bool xInLimits, bool yInLimits) {
@@ -3977,7 +3980,7 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::linearTest(QPointF point, bool xInLim
 		if (coLinera(point.x(), lastXY.x())) 
 		{
 			pass = FIRSTPOINT;
-			//qDebug() << "FIRSTPOINT";
+			qDebug() << "FIRSTPOINT";
 		}else // see if we are continuing along a line or if we can add a new line  to take into account this first line may have truncated early, leaving the rest of the lines dangling out x's
 		if (xInLimits) 
 		{
@@ -3985,14 +3988,14 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::linearTest(QPointF point, bool xInLim
 			// ok, this should only happen when a new glyph is added not when the cursor position is set, but in both cases we can call extend by the point and set the glyph to the current glyph checking that it's not a duplicate
 			//TODO: textRegionLines.end().extend(point).setGlyph(newGlyph);
 			pass = SAMELINE;
-			//qDebug() << "SAMELINE " << point << " lastxy:"<< _lastXY;
+			qDebug() << "SAMELINE " << point << " lastxy:"<< lastXY;
 		}
 	} // else see if y is a bit too much off thelastyx line to be linear
 	else if (adjunctLesser(point.y(), lastXY.y(), lineBaseXY.y())) 
 	{
 		//TODO: character has gone suprtscript
 		pass = STYLESUPERSCRIPT;
-		//qDebug() << "STYLESUPERSCRIPT";
+		qDebug() << "STYLESUPERSCRIPT point:" << point << " lastXY:" << lastXY << " lineBaseXY:" << lineBaseXY;
 	}
 	else if (adjunctGreater(point.y(), lastXY.y(), lineBaseXY.y())) 
 	{
@@ -4005,23 +4008,25 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::linearTest(QPointF point, bool xInLim
 		else {
 			//TODO: this character has overflowed the height, or is still superscript just not so much
 			pass = STYLESUPERSCRIPT; //could be STYLEBELOWBASELINE
-			//qDebug() << "STYLESUPERSCRIPT";
+			qDebug() << "STYLESUPERSCRIPT";
 		}
 	}
 	else {
+		//TODO: We need to calculate things like new parargraphs and left hand justification
 		if (closeToX(textRegioBasenOrigin.x(), point.x()))
 		{
 			if (closeToY(point.y(), lastXY.y())) {
+				//TODO: We need to calculate things like new parargraphs and left hand justification
 				if ((textRegionLines.size() >= 2) && closeToX(textRegionLines[textRegionLines.size() - 2].width, maxWidth)) 
 				{
 					//TODO: add a new line and update the deltas
 					pass = NEWLINE;
-					//qDebug() << "NEWLINE1 point:" << point << " _lastXY:" << _lastXY << " origin: " << textRegioBasenOrigin << " modeheight: " << modeHeigth << " this:" << this;
+					qDebug() << "NEWLINE1 point:" << point << " _lastXY:" << lastXY << " origin: " << textRegioBasenOrigin << " modeheight: " << modeHeigth << " this:" << this << " linespacing: " << lineSpacing;
 				}   // we only have the first line so far, so pass without much of a test.
 				else if (textRegionLines.size() == 1) 
 				{
 					pass = NEWLINE;
-					//qDebug() << "NEWLINE2";
+					qDebug() << "NEWLINE2 point:" << point << " _lastXY:" << lastXY << " origin: " << textRegioBasenOrigin << " modeheight: " << modeHeigth << " this:" << this << " linespacing: " << lineSpacing;
 				}
 			}
 		}
@@ -4059,7 +4064,7 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::isRegionConcurrent(QPointF newPoint)
 TextRegion::FRAMEWORKLINETESTS TextRegion::moveToPoint(QPointF newPoint)
 {
 	//
-	qDebug() << "newPoint1: " << newPoint;
+	//qDebug() << "moveToPoint: " << newPoint;
 	// Do some initilization if we are in a new text region
 	// we could also update these if glyphindex = -1;
 	if (lineBaseXY == QPointF(-1, -1) || textRegionLines.size() == 0 || textRegionLines[0].glyphIndex == -1)
@@ -4072,24 +4077,11 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::moveToPoint(QPointF newPoint)
 		lastXY = newPoint;
 		//qDebug() << "newPoint3: " << newPoint;
 	}
-	//this really needs font supp[ort to work because we can base the size modeheight should be on the size of the font
-	if (modeHeigth == -1 || ((abs(newPoint.y() - lastXY.y()) + 1) > modeHeigth && abs(lastXY.y() - newPoint.y()) + 1 < 30))
+	if (modeHeigth == -1)
 	{
-		//qDebug() << "newPoint4: " << newPoint;
-		// FIXME: do a propper lookup of the height
-		if (abs(lastXY.y() - newPoint.y()) > 5 && lastXY.y() > 0)
-		{
-			modeHeigth = abs(newPoint.y() - lastXY.y()) + 1;
-			//qDebug() << "newPoint5: " << newPoint;
-		}
-		else 
-		{
-			//FIXME: Just initilize modeHeight with anything so that tests don't fail because it's -1
-			//or I could always pass the test if it's -1 which may bew a better idea.#
-			//really if we don't have a line height to go by we should go by the font size, twice the font size.
-			modeHeigth = 10;
-		}		
-	}	
+		modeHeigth = 1;
+	}
+	
 	//TODO: I need to write down which ones we want so I can work it all out, for now just some basic fuzzy matching support.
 	//TODO: x limiting should be different for moving as opposed to adding a new glyph because moiving is due to a discontinuity in glyphs
 	bool xInLimits = false;
@@ -4112,51 +4104,78 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::moveToPoint(QPointF newPoint)
 	{
 		// FIXME: only do this under certain circumstances, we can merge two or move boxes together horrizontally and don't need a new region line on the  m_activeTextRegion we need one on the segments list on textRegionLines.end() . infact this should be done in the linear test function
 			// TODO: finish off the parameters of the last textRegionLine and make sure were not just adding a segment
-			TextRegionLine& textRegionLine = TextRegionLine();
-			// we alweays need to set thease defaults if were adding
-			textRegionLine.baseOrigin = newPoint;
-			textRegionLine.width = 0;
-			if ((pass == NEWLINE && (textRegionLines.back().glyphIndex == -1))/* || pass == SAMELINE //the implementation for this jusat duplicated the few lines above*/)
+			//this really needs font support to work because we can base the size modeheight should be on the size of the font
+		if (textRegionLines.size() == 0) {
+			textRegionLines.push_back(TextRegionLine());
+		}
+		TextRegionLine *textRegionLine = &textRegionLines.back();
+		if (pass == NEWLINE)
+		{
+			//qDebug() << "Newline: ";
+			if(textRegionLine->glyphIndex != -1)
 			{
-				textRegionLine = (TextRegionLine&)textRegionLines.back();
-				if (pass == NEWLINE) {
-					//FIXME: I remember what I was trying to here, IO was trying to set badeOrigin to the line above
-					textRegionLine.baseOrigin = newPoint; // QPointF(newPoint.x(), _lastXY.y());
-					textRegionLine.width = 0;
+				textRegionLines.push_back(TextRegionLine());
+				textRegionLine = &textRegionLines.back();
+			}
+		}
+		else {
+			//qDebug() << "NewSegment: ";
+			if (textRegionLine->segments.empty() || textRegionLine->segments.back().glyphIndex != -1)
+			{
+				textRegionLine->segments.push_back(TextRegionLine());
+			}
+			textRegionLine = &textRegionLine->segments.back();
+		}
+		// we alweays need to set thease defaults if were adding
+		
+		textRegionLine->baseOrigin = newPoint;
+		//qDebug() << "base olrigin: " << textRegionLine->baseOrigin;
+		textRegionLine->width = 0;
+
+		// this should be 
+		if (pass == NEWLINE) 
+		{
+			//FIXME: I don't think it should be conditional I think it should just sets it.
+			textRegionLine->maxHeight = abs(newPoint.y() - lastXY.y()) > textRegionLine->maxHeight ? abs(newPoint.y() - lastXY.y()) : textRegionLine->maxHeight;
+			if(abs(lastXY.y() - newPoint.y()) + 1 > lineSpacing)
+			{
+				if (textRegionLines.size() == 2) {
+					lineSpacing = abs(newPoint.y() - lastXY.y()) + 1;
+					//qDebug() << "setting modeHeight to:" << modeHeigth;
 				}
-				else {
-					// If were not adding a new line were adding a new segment, this is identicle to the default state so no need to do it
-					textRegionLine = TextRegionLine();
-					textRegionLine.baseOrigin = newPoint;// QPointF(newPoint.x(), newPoint.y());
-					textRegionLine.width = 0;
-				}
 			}
-			// this should be 
-			if (pass == NEWLINE) {
-				//FIXME: I don't think it should be conditional I think it should just sets it.
-				textRegionLine.maxHeight = abs(newPoint.y() - lastXY.y()) > textRegionLine.maxHeight ? abs(newPoint.y() - lastXY.y()) : textRegionLine.maxHeight;
-			}
-			else if (pass == SAMELINE || pass == ENDOFLINE || pass == STYLENORMALRETURN) {
-				textRegionLine.maxHeight = textRegionLines.back().maxHeight;
-			}
-			maxHeight = abs(textRegioBasenOrigin.y() - newPoint.y()) > maxHeight ? abs(textRegioBasenOrigin.y() - newPoint.y()) : maxHeight;
-			//FIXME: this should really be the most common height accross all segments and lines.
-			textRegionLine.modeHeigth = abs(newPoint.y() - lastXY.y()) > modeHeigth ? abs(newPoint.y() - lastXY.y()) : modeHeigth;
+		}
+		else if (pass == SAMELINE || pass == ENDOFLINE || pass == STYLENORMALRETURN) 
+		{
+			textRegionLine->maxHeight = textRegionLines.back().maxHeight > textRegionLine->maxHeight ? textRegionLines.back().maxHeight : textRegionLine->maxHeight;
+		}
+		else
+		{
+			textRegionLine->maxHeight = abs(newPoint.y() - lastXY.y()) > textRegionLine->maxHeight ? abs(newPoint.y() - lastXY.y()) : textRegionLine->maxHeight;
+		}
+		maxHeight = abs(textRegioBasenOrigin.y() - newPoint.y()) > maxHeight ? abs(textRegioBasenOrigin.y() - newPoint.y()) : maxHeight;
+		//FIXME: this should really be the most common height accross all segments and lines.
+		//textRegionLine->modeHeigth = abs(newPoint.y() - lastXY.y()) > modeHeigth ? abs(newPoint.y() - lastXY.y()) : modeHeigth;
 			
-			//TODO: set modeHeigth
-			// check to see if were a new line or the first line and we have already had a character set on this line			
-			if ((pass == FIRSTPOINT && textRegionLines.size() == 0) || (pass == NEWLINE && (textRegionLines.back().glyphIndex != -1))) {
-				//FIXME: Therre's a bug here because this will be a duplicate if it's set by thew pass == NEWLINE condition above
-				textRegionLines.push_back(textRegionLine);
-			} // Otherwise see if were adding a new segment, changes is styles of the text etc... should trigger addint a new character so the glyphindex should be gaurenteed to be set if were adding a new segment
-			else if (textRegionLines.back().glyphIndex != -1 && pass == SAMELINE) {
-				if (textRegionLines.back().segments.size() > 0) {
-					textRegionLines.back().segments.back().width = abs(textRegionLines.back().segments.back().baseOrigin.x() - newPoint.x());					
-				}
-				textRegionLines.back().segments.push_back(textRegionLine);
-				textRegionLines.back().width = abs(textRegionLines.back().baseOrigin.x() - newPoint.x());
+		//TODO: set modeHeigth
+		// check to see if were a new line or the first line and we have already had a character set on this line			
+		if ((pass == FIRSTPOINT && textRegionLines.size() == 0) || (pass == NEWLINE && (textRegionLines.back().glyphIndex != -1))) {
+			//FIXME: Therre's a bug here because this will be a duplicate if it's set by thew pass == NEWLINE condition above
+			textRegionLines.push_back(*textRegionLine);
+		} // Otherwise see if were adding a new segment, changes is styles of the text etc... should trigger addint a new character so the glyphindex should be gaurenteed to be set if were adding a new segment
+		else if (textRegionLines.back().glyphIndex != -1 && pass == SAMELINE) {
+			if (textRegionLines.back().segments.size() > 0) {
+				textRegionLines.back().segments.back().width = abs(textRegionLines.back().segments.back().baseOrigin.x() - newPoint.x());					
 			}
-			lastXY = newPoint;
+			//textRegionLines.back().segments.push_back(*textRegionLine);
+			textRegionLine = &textRegionLines.back();
+			textRegionLine->width = abs(textRegionLine->baseOrigin.x() - newPoint.x());
+		}
+		lastXY = newPoint;
+	}
+	else
+	{
+		//qDebug() << "movetopoint failed";
 	}
 
 	return pass;
@@ -4167,10 +4186,12 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::addGlyphAtPoint(QPointF newGlyphPoint
 
 	QPointF movedGlyphPoint = QPointF(newGlyphPoint.x() + new_glyph.dx, newGlyphPoint.y() + new_glyph.dy);
 	//TODO: should  probably be more forgiving when adding a glyph in the x direction because it could be several white spaces skipped
-	if (modeHeigth == -1)
+	//qDebug() << "addGlyphAtPoint start" << newGlyphPoint << " glyph:"<< new_glyph.code;
+	if (glyphs.size() == 1)
 	{
 		// FIXME: do a propper lookup of the height
-		modeHeigth = new_glyph.dx * 2;
+		modeHeigth = new_glyph.dx;
+		//qDebug() << "addGlyphAtPoint start";
 	}
 	if (lastXY == QPointF(-1, -1)) {
 		lastXY = newGlyphPoint;
@@ -4179,20 +4200,21 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::addGlyphAtPoint(QPointF newGlyphPoint
 		lineBaseXY = newGlyphPoint;
 	}	
 	bool xInLimits = false;
-	if (closeToX(movedGlyphPoint.x(), lastXY.x())) {
+	if (closeToX(newGlyphPoint.x(), lastXY.x())) {
 		xInLimits = true;
 	}
 	bool yInLimits = false;
-	if (closeToY(movedGlyphPoint.y(), lastXY.y())) {
+	if (closeToY(newGlyphPoint.y(), lastXY.y())) {
 		yInLimits = true;
 	}
-	FRAMEWORKLINETESTS pass = linearTest(movedGlyphPoint, xInLimits, yInLimits);
+	FRAMEWORKLINETESTS pass = linearTest(newGlyphPoint, xInLimits, yInLimits);
 	//TODO: Implement this in the caller
 	// if nothing can be done then write out the textregioin and delete it and create a new trextrext and re-adcfd ther char, set the pos etc...
 	if (pass != FRAMEWORKLINETESTS::FAIL) {
 		//TODO: possible don't store the glyphs on the textRegion, well certainly not like this, we only need to check bounbdry and feature positions
 		//glyphs.push_back(new_glyph);
 		maxHeight = abs(textRegioBasenOrigin.y() - movedGlyphPoint.y()) + modeHeigth > maxHeight ? abs(textRegioBasenOrigin.y() - movedGlyphPoint.y()) + modeHeigth : maxHeight;
+		/*
 		if (textRegionLines.size() == 0)
 		{
 			TextRegionLine newTextRegionLine = TextRegionLine();
@@ -4200,56 +4222,60 @@ TextRegion::FRAMEWORKLINETESTS TextRegion::addGlyphAtPoint(QPointF newGlyphPoint
 			newTextRegionLine.width = new_glyph.dx;
 			textRegionLines.push_back(newTextRegionLine);
 		}
+		*/
+		TextRegionLine* textRegionLine = nullptr;
 		//at the moment a new segment only gets added when the line is created. a new segment should also get added if there's any change in style or layout etc...but that feature can be added llater, it's not needed for basic textframe support with no style.
-		if (textRegionLines.back().glyphIndex == -1) {
-			
-			TextRegionLine& textRegionLine = textRegionLines.back();
-			textRegionLine.glyphIndex = glyphs.size() - 1;			
-			textRegionLine.width = new_glyph.dx;
-			textRegionLine.baseOrigin = QPointF(newGlyphPoint.x(), newGlyphPoint.y());
-			//FIXME: Use the base origin of the previous line if there is one
-			textRegionLine.modeHeigth = abs(newGlyphPoint.y() - lastXY.y());
-			textRegionLine.maxHeight = abs(newGlyphPoint.y() - lastXY.y());
-		}
-		//TODO: Work out when to add new line segments and when to update them
-		if (textRegionLines.back().segments.empty())
+		// FIXME: becaused moveTo should always be called first we should always have a textRegionLines
+		if (textRegionLines.size() == 0)
 		{
+			TextRegionLine newTextRegionLine = TextRegionLine();
+			newTextRegionLine.baseOrigin = QPointF(textRegioBasenOrigin.x(), newGlyphPoint.y());
+			textRegionLines.push_back(newTextRegionLine);
+		}
+		textRegionLine = &textRegionLines.back();
+
+		if (textRegionLine->glyphIndex == -1)
+		{
+			textRegionLine->glyphIndex = glyphs.size() - 1;
+			textRegionLine->baseOrigin = QPointF(textRegioBasenOrigin.x(), newGlyphPoint.y());
+		}
+		
+		if (textRegionLine->segments.empty() || newGlyphPoint.x() > textRegionLine->baseOrigin.x() + textRegionLine->width && textRegionLine->segments.back().glyphIndex != -1)
+		{			
 			// add a new segment
 			TextRegionLine newSegment = TextRegionLine();
-			newSegment.glyphIndex = textRegionLines.back().glyphIndex;
+			newSegment.glyphIndex = textRegionLine->glyphIndex;
 			newSegment.width = 0;
-			textRegionLines.back().segments.push_back(newSegment);
+			newSegment.baseOrigin = QPointF(newGlyphPoint.x(), textRegionLine->baseOrigin.y());
+			textRegionLine->segments.push_back(newSegment);
 		}
-		if (textRegionLines.back().segments.back().width == 0)
+		// update the text line and segment widths,
+		TextRegionLine *segment = &textRegionLine->segments.back();
+		segment->width = abs(movedGlyphPoint.x() - segment->baseOrigin.x());
+		segment->glyphIndex = glyphs.size() - 1;
+		if (textRegionLines.size() > 1)
 		{
-			TextRegionLine& segment = textRegionLines.back().segments.back();
-			segment.width = new_glyph.dx;
-			segment.baseOrigin = QPointF(newGlyphPoint.x(), textRegionLines.back().baseOrigin.y());
-			//FIXME: Use the base origin of the previous line if there is one
-			segment.modeHeigth = abs(newGlyphPoint.y() - lastXY.y());
-			segment.maxHeight = abs(newGlyphPoint.y() - lastXY.y());
-			segment.glyphIndex = glyphs.size() - 1;
-			//FIXME:Set thease properly using lastxy &co.
-			textRegionLines.back().maxHeight = textRegionLines.back().maxHeight > segment.maxHeight ? textRegionLines.back().maxHeight : segment.maxHeight;
-			textRegionLines.back().modeHeigth = segment.modeHeigth; //FIXME: this needs to be calculated based on the heights of all the segments
-			textRegionLines.back().width = abs(movedGlyphPoint.x() -  textRegionLines.back().baseOrigin.x());
-			maxWidth = textRegionLines.back().width > maxWidth ? textRegionLines.back().width : maxWidth;
+			segment->modeHeigth = abs(newGlyphPoint.y() - textRegionLines[textRegionLines.size() - 2].baseOrigin.y());
+			segment->maxHeight = segment->modeHeigth > segment->maxHeight ? segment->modeHeigth : segment->maxHeight;
 		}
 		else
 		{
-			// update the text line and segment widths,
-			TextRegionLine& segment = textRegionLines.back().segments.back();
-			segment.width = abs(movedGlyphPoint.x() - segment.baseOrigin.x());
-			segment.glyphIndex = glyphs.size() - 1;
-			textRegionLines.back().width = abs(movedGlyphPoint.x() - textRegionLines.back().baseOrigin.x());
-			maxWidth = textRegionLines.back().width > maxWidth ? textRegionLines.back().width : maxWidth;
-			segment.modeHeigth = abs(newGlyphPoint.y() - lastXY.y()) > segment.modeHeigth ? abs(newGlyphPoint.y() - lastXY.y()) : segment.modeHeigth;
-			segment.maxHeight = abs(newGlyphPoint.y() - lastXY.y()) > segment.maxHeight ? abs(newGlyphPoint.y() - lastXY.y()) : segment.maxHeight;
+			segment->modeHeigth = new_glyph.dx;
+			segment->maxHeight = segment->modeHeigth > segment->maxHeight ? segment->modeHeigth : segment->maxHeight;
 		}
+		textRegionLine->maxHeight = textRegionLine->maxHeight > segment->maxHeight ? textRegionLine->maxHeight : segment->maxHeight;
+		textRegionLine->modeHeigth = textRegionLine->maxHeight; //FIXME: this needs to be calculated based on the heights of all the segments
+		textRegionLine->width = abs(movedGlyphPoint.x() - textRegionLine->baseOrigin.x());
+		maxWidth = textRegionLine->width > maxWidth ? textRegionLine->width : maxWidth;
+		
 		//FIXME: Check if we are on a new line before setting _lineBaseXY
-		lineBaseXY = movedGlyphPoint;
+		lineBaseXY = textRegionLine->baseOrigin;// movedGlyphPoint;
 		lastXY = movedGlyphPoint;
 		
+	}
+	else
+	{
+		qDebug() << "addGlyphAtPoint failed";
 	}
 	return pass;
 }
@@ -4352,8 +4378,9 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 		// a delayed call using the last glyph that was put onto the stack. it will be a glyph situated on the far side bounds of the text region
 		// only add if we are on a new line, so the y position will be shifted but the glyph.y and textregion.y should marry
 		if (activeTextRegion.coLinera(activeTextRegion.lastXY.y(), activeTextRegion.glyphs.back().position.y()) &&
-			!activeTextRegion.coLinera(new_position.y(), activeTextRegion.glyphs.back().position.y()) &&
-			activeTextRegion.closeToX(new_position.x(), activeTextRegion.glyphs.back().position.x()))
+			!activeTextRegion.coLinera(new_position.y(), activeTextRegion.glyphs.back().position.y()) //&&
+			//activeTextRegion.closeToX(new_position.x(), activeTextRegion.glyphs.back().position.x())
+			)
 		{
 			if (activeTextRegion.addGlyphAtPoint(activeTextRegion.glyphs.back().position, activeTextRegion.glyphs.back()) == TextRegion::FAIL) {
 				qDebug("FIXME: Rogue glyph detected, this should never happen because the copuror should move before glyphs in new regions are added.");
@@ -4400,7 +4427,7 @@ void SlaOutputDev::updateTextPos(GfxState* state) {
 
 void SlaOutputDev::renderTextFrame()
 {
-	//TODO: Implement, this should all be based on tyhe framework and using m_activeTextRegion
+	//TODO: Implement, this should all be based on the framework and using m_activeTextRegion
 	//qDebug() << "_flushText()    m_doc->currentPage()->xOffset():" << m_doc->currentPage()->xOffset();
 	// Ignore empty strings
 	if (activeTextRegion.glyphs.empty()) {
@@ -4408,8 +4435,8 @@ void SlaOutputDev::renderTextFrame()
 		return;
 	}
 
-	//TODO: Look this up using the framework
-	const PdfGlyph& first_glyph = activeTextRegion.glyphs[activeTextRegion.textRegionLines[0].glyphIndex];// (*i);
+	//FIXME: This is redundant, should be using the framework not the first glyph.
+	//const PdfGlyph& first_glyph = activeTextRegion.glyphs[activeTextRegion.textRegionLines[0].glyphIndex];// (*i);
 	// TODO: Use the framework for this, not currently supported
 	/*
 	int render_mode = first_glyph.render_mode;
@@ -4420,9 +4447,10 @@ void SlaOutputDev::renderTextFrame()
 	}
 	*/
 	//FIXME: Use the framework for positioning not the first glyph
-	qreal xCoor = m_doc->currentPage()->xOffset() + (double)first_glyph.position.x();
-	qreal yCoor = m_doc->currentPage()->initialHeight() - (m_doc->currentPage()->yOffset() + (double)first_glyph.position.y() + activeTextRegion.modeHeigth); // don't know if y is top down or bottom up
+	qreal xCoor = m_doc->currentPage()->xOffset() + activeTextRegion.textRegioBasenOrigin.x();
+	qreal yCoor = m_doc->currentPage()->initialHeight() - (m_doc->currentPage()->yOffset() + (double)activeTextRegion.textRegioBasenOrigin.y() + activeTextRegion.lineSpacing); // don't know if y is top down or bottom up
 	double  lineWidth = 0.0;
+	qDebug() << "rendering new frame at:" << xCoor << "," << yCoor << " With lineheight of: " << activeTextRegion.modeHeigth << "Height:" << activeTextRegion.maxHeight << " Width:" << activeTextRegion.maxWidth;
 	/* colours don't get reset to CommonStrings::None often enough.*/
 	int z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Rectangle, xCoor, yCoor, 40, 40, 0, CommonStrings::None, CommonStrings::None /* this->CurrColorStroke*/);//, PageItem::ItemKind::InlineItem);
 	PageItem* textNode = m_doc->Items->at(z);
@@ -4473,17 +4501,15 @@ void SlaOutputDev::renderTextFrame()
 	//TODO: This needs to come from the framework
 	//QString CurrColorText = getColor(state->getFillColorSpace(), state->getFillColor(), &shade);
 	//TODO: replace this with the framework
-	//applyTextStyleToCharStyle(pStyle.charStyle(), _glyphs[0].style->getFont().family(), CurrColorText, _glyphs[0].style->getFont().pointSizeF());// *_font_scaling);
-	textNode->invalid = true;
+	//applyTextStyleToCharStyle(pStyle.charStyle(), _glyphs[0].style->getFont().family(), CurrColorText, _glyphs[0].style->getFont().pointSizeF());// *_font_scaling);	
 	CharStyle& cStyle = (CharStyle&)pStyle.charStyle();
 	cStyle.setScaleH(1000.0);
 	cStyle.setScaleV(1000.0);
 	cStyle.setHyphenChar(SpecialChars::BLANK.unicode());
 
-	//text_node->itemText.setDefaultStyle(pStyle);
-	//FIXME: replace this with the framework
+	textNode->itemText.setDefaultStyle(pStyle);
+	textNode->invalid = true;
 	activeTextRegion.renderToTextFrame(textNode, pStyle);
-	//parseText(glyphs, text_node, pStyle);
 	//FIXME: Paragraphs need to be implemented properly  this needs to be applied to the charstyle of the default pstyle
 	textNode->itemText.insertChars(SpecialChars::PARSEP, true);
 
@@ -4546,28 +4572,25 @@ void SlaOutputDev::finishItem(PageItem* item) {
 
 	//item->setFillTransparency(1.0 - state->getFillOpacity() > state->getStrokeOpacity() ? state->getFillOpacity() : state->getStrokeOpacity());
 	//item->setLineTransparency(1.0);
-
-	//item->setStartArrowIndex(0);
-	//item->setEndArrowIndex(0);
 }
 
 
 void AddFirstChar::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
 	//qDebug() << "addChar() '" << u << " : " << uLen;	
+	/*
 	bool is_space = (uLen == 1 && u[0] == 32);
 	// Skip beginning space
 	if (is_space) {
 		return;
 	}
-
+	*/
 	PdfGlyph new_glyph;
-	new_glyph.is_space = false;
+	//new_glyph.is_space = false;
 	new_glyph.position = QPointF(x - originX, y - originY);
 	new_glyph.dx = dx;
 	new_glyph.dy = dy;
 
-	//FIXME: have an array of differnt types of addchar class instead of creating and destroying them all the time
 	m_slaOutputDev->addChar = m_slaOutputDev->addCharModes[SlaOutputDev::ADDBASICCHAR];
 
 	// Convert the character to UTF-16 since that's our SVG document's encoding	
@@ -4582,14 +4605,13 @@ void AddFirstChar::addChar(GfxState* state, double x, double y, double dx, doubl
 	if (m_slaOutputDev->activeTextRegion.addGlyphAtPoint(QPointF(x, y), new_glyph) == TextRegion::FAIL) {
 		qDebug("FIXME: Rogue glyph detected, this should never happen because the copuror should move before glyphs in new regions are added.");
 	}
-
 }
 
 void AddBasicChar::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
 	//qDebug() << "addChar() '" << u << " : " << uLen;
 	// TODO: Compleatly gut this function so all that it ends up doing is placing a character and some positioning information on a stack get rid of all the other junk as it's not needed
-
+	/*
 	bool is_space = (uLen == 1 && u[0] == 32);
 
 	// Allow only one space in a row
@@ -4597,15 +4619,14 @@ void AddBasicChar::addChar(GfxState* state, double x, double y, double dx, doubl
 		(m_slaOutputDev->activeTextRegion.glyphs[m_slaOutputDev->activeTextRegion.glyphs.size() - 1].code == QChar::SpecialCharacter::Space)) {
 		return;
 	}
-
+	*/
 	PdfGlyph new_glyph;
-	new_glyph.is_space = is_space;
+	//new_glyph.is_space = is_space;
 	new_glyph.position = QPoint(x - originX, y - originY);
 	new_glyph.dx = dx;
 	new_glyph.dy = dy;
 
 	// Convert the character to UTF-16 since that's our SVG document's encoding
-
 	for (int i = 0; i < uLen; i++) {
 		new_glyph.code += (char16_t)u[i];
 	}
