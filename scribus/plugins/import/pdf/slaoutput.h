@@ -196,6 +196,7 @@ public:
 	QPointF textRegioBasenOrigin = QPointF(-1, -1);
 	qreal maxHeight = -1;
 	qreal modeHeigth = -1;
+	qreal lineSpacing = -1;
 	std::vector<TextRegionLine> textRegionLines = std::vector<TextRegionLine>();
 	qreal maxWidth = -1;
 	QPointF lineBaseXY = QPointF(-1, -1); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
