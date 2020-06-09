@@ -158,7 +158,8 @@ private:
 * Holds all the dtails for each glyph in the text imported from the pdf file.
 *
 */
-struct PdfGlyph {
+struct PdfGlyph
+{
 	double dx;  // X advance value
 	double dy;  // Y advance value
 	double rise;    // Text rise parameter
@@ -170,7 +171,7 @@ class TextRegionLine
 {
 public:
 	qreal maxHeight = 0;
-	//we can probably use maxHeight for this.	
+	//we can probably use maxHeight for this.
 	qreal width = 0;
 	int glyphIndex = 0;
 	QPointF baseOrigin = QPointF(0, 0);
@@ -178,9 +179,11 @@ public:
 
 };
 
-class TextRegion {
+class TextRegion
+{
 public:
-	enum class FrameworkLineTests {
+	enum class FrameworkLineTests
+	{
 		FIRSTPOINT,
 		SAMELINE,
 		STYLESUPERSCRIPT,
@@ -207,7 +210,7 @@ public:
 	TextRegion::FrameworkLineTests isRegionConcurrent(QPointF newPoint);
 	TextRegion::FrameworkLineTests moveToPoint(QPointF newPoint);
 	TextRegion::FrameworkLineTests addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
-	void renderToTextFrame(PageItem* textNode, ParagraphStyle& pStyle);	
+	void renderToTextFrame(PageItem* textNode, ParagraphStyle& pStyle);
 	std::vector<PdfGlyph> glyphs;
 	bool isNew();
 };
@@ -215,7 +218,7 @@ public:
 class AddCharInterface
 {
 public:
-	// Pure Virtual Function 
+	// Pure Virtual Function
 	virtual void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) = 0;
 };
 
@@ -224,7 +227,8 @@ class TextFramework
 public:
 	TextFramework();
 	~TextFramework();
-	enum class AddCharMode {
+	enum class AddCharMode
+	{
 		ADDFIRSTCHAR,
 		ADDBASICCHAR,
 		ADDCHARWITHNEWSTYLE,
@@ -317,7 +321,7 @@ public:
 	void endMarkedContent(GfxState *state) override;
 	void markPoint(POPPLER_CONST char *name) override;
 	void markPoint(POPPLER_CONST char *name, Dict *properties) override;
-	
+
 
 	//----- image drawing
 	void drawImageMask(GfxState *state, Object *ref, Stream *str, int width, int height, GBool invert, GBool interpolate, GBool inlineImg) override;
@@ -393,7 +397,7 @@ private:
 
 	void createImageFrame(QImage& image, GfxState *state, int numColorComponents);
 
-	//PDF Textbox framework	
+	//PDF Textbox framework
 	void setFillAndStrokeForPDF(GfxState* state, PageItem* text_node);
 	void updateTextPos(GfxState* state) override;
 	void renderTextFrame();
