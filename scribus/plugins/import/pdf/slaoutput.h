@@ -159,23 +159,21 @@ private:
 *
 */
 struct PdfGlyph {
-	QPointF position;    // Absolute glyph coords
 	double dx;  // X advance value
 	double dy;  // Y advance value
 	double rise;    // Text rise parameter
-	QString code;   // UTF-16 coded character but we only store and use UTF-8, the slternstive is const char * for utf8 so far as qt is concerned
-	bool is_space;
+	QChar code;   // UTF-16 coded character
 };
 
 
 class TextRegionLine
 {
 public:
-	qreal maxHeight = -1;
-	qreal modeHeigth = -1;
-	qreal width = -1;
-	int glyphIndex = -1;
-	QPointF baseOrigin = QPointF(-1, -1);
+	qreal maxHeight = 0;
+	//we can probably use maxHeight for this.	
+	qreal width = 0;
+	int glyphIndex = 0;
+	QPointF baseOrigin = QPointF(0, 0);
 	std::vector<TextRegionLine> segments = std::vector<TextRegionLine>();
 
 };
@@ -193,14 +191,13 @@ public:
 		FAIL
 	};
 
-	QPointF textRegioBasenOrigin = QPointF(-1, -1);
-	qreal maxHeight = -1;
-	qreal modeHeigth = -1;
-	qreal lineSpacing = -1;
+	QPointF textRegioBasenOrigin = QPointF(0, 0);
+	qreal maxHeight = 0;
+	qreal lineSpacing = 1;
 	std::vector<TextRegionLine> textRegionLines = std::vector<TextRegionLine>();
-	qreal maxWidth = -1;
-	QPointF lineBaseXY = QPointF(-1, -1); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
-	QPointF lastXY = QPointF(-1, -1);
+	qreal maxWidth = 0;
+	QPointF lineBaseXY = QPointF(0, 0); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
+	QPointF lastXY = QPointF(0, 0);
 	static bool coLinera(qreal a, qreal b);
 	bool closeToX(qreal x1, qreal x2);
 	bool closeToY(qreal y1, qreal y2);
@@ -211,7 +208,8 @@ public:
 	TextRegion::FRAMEWORKLINETESTS moveToPoint(QPointF newPoint);
 	TextRegion::FRAMEWORKLINETESTS addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
 	void renderToTextFrame(PageItem* textNode, ParagraphStyle& pStyle);	
-	std::vector<PdfGlyph> glyphs; //this may replace some of the other settings or it may not, certainly not font as text gets flushed if the font changes
+	std::vector<PdfGlyph> glyphs;
+	bool isNew();
 };
 
 class AddCharInterface
@@ -219,6 +217,26 @@ class AddCharInterface
 public:
 	// Pure Virtual Function 
 	virtual void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) = 0;
+};
+
+class TextFramework
+{
+public:
+	TextFramework();
+	~TextFramework();
+	enum ADDCHARMODE {
+		ADDFIRSTCHAR,
+		ADDBASICCHAR,
+		ADDCHARWITHNEWSTYLE,
+		ADDCHARWITHPREVIOUSSTYLE
+	};
+	std::map<ADDCHARMODE, AddCharInterface*> addCharModes;
+	TextRegion& activeTextRegion = TextRegion(); //faster than calling back on the vector all the time.
+	void addNewTextRegion();
+	AddCharInterface* addChar = nullptr;
+	bool isNewLineOrRegion(QPointF newPosition);
+private:
+	std::vector<TextRegion> m_textRegions = std::vector<TextRegion>();
 };
 
 class SlaOutputDev : public OutputDev
@@ -342,21 +360,6 @@ public:
 	void  type3D0(GfxState * /*state*/, double /*wx*/, double /*wy*/) override;
 	void  type3D1(GfxState * /*state*/, double /*wx*/, double /*wy*/, double /*llx*/, double /*lly*/, double /*urx*/, double /*ury*/) override;
 
-	//text as text
-	
-	AddCharInterface* addChar = nullptr;
-
-	enum ADDCHARMODE {
-		ADDFIRSTCHAR,
-		ADDBASICCHAR,
-		ADDCHARWITHNEWSTYLE,
-		ADDCHARWITHPREVIOUSSTYLE
-	};
-
-	std::map<ADDCHARMODE, AddCharInterface*> addCharModes;
-
-	TextRegion& activeTextRegion = TextRegion(); //faster than calling back on the vector all the time.
-
 	//----- form XObjects
 	void drawForm(Ref /*id*/) override { qDebug() << "Draw Form"; }
 
@@ -462,63 +465,58 @@ private:
 	QHash<QString, QList<int> > m_radioMap;
 	QHash<int, PageItem*> m_radioButtons;
 	int m_actPage;
-
 	//PDF Textbox framework
-	std::vector<TextRegion> m_textRegions = std::vector<TextRegion>();	
+	TextFramework* m_textFramework = nullptr;
 };
 
 class AddFirstChar : public AddCharInterface
 {
-
 public:
-	AddFirstChar(SlaOutputDev *slaOutputDev)
+	AddFirstChar(TextFramework* textFramework)
 	{
-		m_slaOutputDev = slaOutputDev;
+		m_textFramework = textFramework;
 	}
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
 private:
-	SlaOutputDev* m_slaOutputDev = nullptr;
+	TextFramework* m_textFramework = nullptr;
 };
 
 class AddBasicChar : public AddCharInterface
 {
-
 public:
-	AddBasicChar(SlaOutputDev* slaOutputDev)
+	AddBasicChar(TextFramework* textFramework)
 	{
-		m_slaOutputDev = slaOutputDev;
+		m_textFramework = textFramework;
 	}
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
 private:
-	SlaOutputDev* m_slaOutputDev = nullptr;
+	TextFramework* m_textFramework = nullptr;
 };
 
 // TODO: implement these addchar definitions so that they can handle changes in style, font, text micro positioning, scaling, matrix etc...
 class AddCharWithNewStyle : public AddCharInterface
 {
-
 public:
-	AddCharWithNewStyle(SlaOutputDev* slaOutputDev)
+	AddCharWithNewStyle(TextFramework* textFramework)
 	{
-		m_slaOutputDev = slaOutputDev;
+		m_textFramework = textFramework;
 	}
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
 private:
-	SlaOutputDev* m_slaOutputDev = nullptr;
+	TextFramework* m_textFramework = nullptr;
 };
 
 // TODO: implement these addchar definitions so that they can handle changes in style, font, text micro positioning, scaling, matrix etc...
 class AddCharWithPreviousStyle : public AddCharInterface
 {
-
 public:
-	AddCharWithPreviousStyle(SlaOutputDev* slaOutputDev)
+	AddCharWithPreviousStyle(TextFramework* textFramework)
 	{
-		m_slaOutputDev = slaOutputDev;
+		m_textFramework = textFramework;
 	}
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
 private:
-	SlaOutputDev* m_slaOutputDev = nullptr;
+	TextFramework* m_textFramework = nullptr;
 };
 
 #endif
