@@ -4538,8 +4538,7 @@ bool TextFramework::isNewLineOrRegion(QPointF newPosition)
 PdfGlyph TextFramework::AddFirstChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
 	//qDebug() << "AddFirstChar() '" << u << " : " << uLen;	
-	auto newGlyph = AddBasicChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
-
+	auto newGlyph = TextFramework::AddCharCommon(state, x, y, dx, dy, u, uLen);
 	setCharMode(AddCharMode::ADDBASICCHAR);
 
 	//only need to be called for the very first point
@@ -4548,8 +4547,7 @@ PdfGlyph TextFramework::AddFirstChar(GfxState* state, double x, double y, double
 		qDebug("FIXME: Rogue glyph detected, this should never happen because the coursor should move before glyphs in new regions are added.");
 	}
 }
-
-PdfGlyph TextFramework::AddBasicChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
+PdfGlyph TextFramework::AddCharCommon(GfxState* state, double x, double y, double dx, double dy, Unicode const* u, int uLen)
 {
 	//qDebug() << "AddBasicChar() '" << u << " : " << uLen;
 	PdfGlyph newGlyph;
@@ -4563,6 +4561,12 @@ PdfGlyph TextFramework::AddBasicChar(GfxState* state, double x, double y, double
 	}
 
 	newGlyph.rise = state->getRise();
+	return newGlyph;
+}
+
+PdfGlyph TextFramework::AddBasicChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
+{
+	auto newGlyph = AddCharCommon(state, x, y, dx, dy, u, uLen);
 	activeTextRegion.lastXY = QPointF(x, y);
 	activeTextRegion.glyphs.push_back(newGlyph);
 	return newGlyph;
@@ -4571,13 +4575,15 @@ PdfGlyph TextFramework::AddBasicChar(GfxState* state, double x, double y, double
 PdfGlyph TextFramework::AddCharWithNewStyle(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
 	//qDebug() << "AddCharWithNewStyle() '" << u << " : " << uLen;
-	auto newGlyph = AddBasicChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
+	auto newGlyph = AddCharCommon(state, x, y, dx, dy, u, uLen);
+	activeTextRegion.glyphs.push_back(newGlyph);
 	return newGlyph;
 }
 
 PdfGlyph TextFramework::AddCharWithPreviousStyle(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
 	//qDebug() << "AddCharWithPreviousStyle() '" << u << " : " << uLen;
-	auto newGlyph = AddBasicChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);	
+	auto newGlyph = AddCharCommon(state, x, y, dx, dy, u, uLen);
+	activeTextRegion.glyphs.push_back(newGlyph);
 	return newGlyph;
 }
