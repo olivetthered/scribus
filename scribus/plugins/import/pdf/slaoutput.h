@@ -201,16 +201,16 @@ public:
 	qreal maxWidth = {};
 	QPointF lineBaseXY = QPointF({ }, { }); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
 	QPointF lastXY = QPointF({}, {});
-	static bool coLinera(qreal a, qreal b);
-	bool closeToX(qreal x1, qreal x2);
-	bool closeToY(qreal y1, qreal y2);
+	static bool collinear(qreal a, qreal b);
+	bool isCloseToX(qreal x1, qreal x2);
+	bool isCloseToY(qreal y1, qreal y2);
 	bool adjunctLesser(qreal testY, qreal lastY, qreal baseY);
 	bool adjunctGreater(qreal testY, qreal lastY, qreal baseY);
 	TextRegion::FrameworkLineTests linearTest(QPointF point, bool xInLimits, bool yInLimits);
 	TextRegion::FrameworkLineTests isRegionConcurrent(QPointF newPoint);
 	TextRegion::FrameworkLineTests moveToPoint(QPointF newPoint);
 	TextRegion::FrameworkLineTests addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
-	void renderToTextFrame(PageItem* textNode, ParagraphStyle& pStyle);	
+	void renderToTextFrame(PageItem* textNode);	
 	std::vector<PdfGlyph> glyphs;
 	bool isNew();
 };
@@ -263,7 +263,7 @@ public:
 
 	std::map<AddCharMode, PdfGlyph(TextFramework::*)(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)> addCharModes;
 	TextRegion& activeTextRegion = TextRegion(); //faster than calling back on the vector all the time.
-	void addNewTextRegion();
+	void addTextRegion();
 	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
 	bool isNewLineOrRegion(QPointF newPosition);
 private:
@@ -392,6 +392,7 @@ public:
 	void  beginTextObject(GfxState *state) override;
 	void  endTextObject(GfxState *state) override;
 	void  drawChar(GfxState *state, double /*x*/, double /*y*/, double /*dx*/, double /*dy*/, double /*originX*/, double /*originY*/, CharCode /*code*/, int /*nBytes*/, POPPLER_CONST_082 Unicode * /*u*/, int /*uLen*/) override;
+	void  drawCharAsVector(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, POPPLER_CONST_082 Unicode* u, int uLen);
 	GBool beginType3Char(GfxState * /*state*/, double /*x*/, double /*y*/, double /*dx*/, double /*dy*/, CharCode /*code*/, POPPLER_CONST_082 Unicode * /*u*/, int /*uLen*/) override;
 	void  endType3Char(GfxState * /*state*/) override;
 	void  type3D0(GfxState * /*state*/, double /*wx*/, double /*wy*/) override;
