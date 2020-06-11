@@ -20,6 +20,8 @@ for which a new license (GPL+exception) is in place.
 #include "util_math.h"
 #include <tiffio.h>
 
+
+#define DEBUG_TEXT_IMPORT
 namespace
 {
 	// Compute the intersection of two paths while considering the fillrule of each of them.
@@ -285,8 +287,6 @@ SlaOutputDev::SlaOutputDev(ScribusDoc* doc, QList<PageItem*> *Elements, QStringL
 	currentLayer = m_doc->activeLayer();
 	layersSetByOCG = false;
 	importTextAsVectors = true;
-
-	m_textFramework = new TextFramework();	
 }
 
 SlaOutputDev::~SlaOutputDev()
@@ -295,7 +295,6 @@ SlaOutputDev::~SlaOutputDev()
 	tmpSel->clear();
 	delete tmpSel;
 	delete m_fontEngine;
-	delete m_textFramework;
 }
 
 /* get Actions not implemented by Poppler */
@@ -3365,7 +3364,7 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 			}
 		}
 		if (!importTextAsVectors) { // donm't render the char as vectors add it to an array so it can be rendred as a string			
-			m_textFramework->addChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
+			m_textFramework.addChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
 		}
 	}
 }
@@ -3438,27 +3437,27 @@ void SlaOutputDev::type3D1(GfxState *state, double wx, double wy, double llx, do
 void SlaOutputDev::beginTextObject(GfxState *state)
 {
 	pushGroup();
-	if (importTextAsVectors == false && !m_textFramework->activeTextRegion.textRegionLines.empty()) {
-		m_textFramework->addNewTextRegion();
+	if (importTextAsVectors == false && !m_textFramework.activeTextRegion.textRegionLines.empty()) {
+		m_textFramework.addNewTextRegion();
 	}
 }
 
 void SlaOutputDev::endTextObject(GfxState *state)
 {
 
-	if (importTextAsVectors == false && !m_textFramework->activeTextRegion.textRegionLines.empty()) {
+	if (importTextAsVectors == false && !m_textFramework.activeTextRegion.textRegionLines.empty()) {
 		// Add the last glyph to the textregion
-		QPointF glyphXY = m_textFramework->activeTextRegion.lastXY;
-		m_textFramework->activeTextRegion.lastXY.setX(m_textFramework->activeTextRegion.lastXY.x() - m_textFramework->activeTextRegion.glyphs.back().dx);
-		if (m_textFramework->activeTextRegion.addGlyphAtPoint(glyphXY, m_textFramework->activeTextRegion.glyphs.back()) == TextRegion::FrameworkLineTests::FAIL) {
+		QPointF glyphXY = m_textFramework.activeTextRegion.lastXY;
+		m_textFramework.activeTextRegion.lastXY.setX(m_textFramework.activeTextRegion.lastXY.x() - m_textFramework.activeTextRegion.glyphs.back().dx);
+		if (m_textFramework.activeTextRegion.addGlyphAtPoint(glyphXY, m_textFramework.activeTextRegion.glyphs.back()) == TextRegion::FrameworkLineTests::FAIL) {
 			qDebug("FIXME: Rogue glyph detected, this should never happen because the copuror should move before glyphs in new regions are added.");
 		}
 		renderTextFrame();		
-	} else if (importTextAsVectors == false && !m_textFramework->activeTextRegion.textRegionLines.empty()) {
+	} else if (importTextAsVectors == false && !m_textFramework.activeTextRegion.textRegionLines.empty()) {
 		qDebug("FIXME:Rogue textblock");
 	}
 	
-	m_textFramework->setCharMode(TextFramework::AddCharMode::ADDFIRSTCHAR);
+	m_textFramework.setCharMode(TextFramework::AddCharMode::ADDFIRSTCHAR);
 //	qDebug() << "SlaOutputDev::endTextObject";
 	if (!m_clipTextPath.isEmpty())
 	{
@@ -3996,7 +3995,9 @@ TextRegion::FrameworkLineTests TextRegion::linearTest(QPointF point, bool xInLim
 	{
 		//TODO: character has gone suprtscript
 		pass = FrameworkLineTests::STYLESUPERSCRIPT;
+#ifdef DEBUG_TEXT_IMPORT
 		qDebug() << "STYLESUPERSCRIPT point:" << point << " lastXY:" << lastXY << " lineBaseXY:" << lineBaseXY;
+#endif
 	}
 	else if (adjunctGreater(point.y(),lastXY.y(),lineBaseXY.y()))
 	{
@@ -4004,13 +4005,17 @@ TextRegion::FrameworkLineTests TextRegion::linearTest(QPointF point, bool xInLim
 		{
 			// were back on track
 			pass = FrameworkLineTests::STYLENORMALRETURN;
+#ifdef DEBUG_TEXT_IMPORT
 			qDebug() << "STYLENORMALRETURN";
+#endif
 		}
 		else
 		{
 			//TODO: this character has overflowed the height, or is still superscript just not so much
 			pass = FrameworkLineTests::STYLESUPERSCRIPT; //could be STYLEBELOWBASELINE
+#ifdef DEBUG_TEXT_IMPORT
 			qDebug() << "STYLESUBSCRIPT point:" << point << " lastXY:" << lastXY << " lineBaseXY:" << lineBaseXY;
+#endif
 			//qDebug() << "STYLESUBSCRIPT: ";
 		}
 	}
@@ -4328,18 +4333,18 @@ void SlaOutputDev::setFillAndStrokeForPDF(GfxState* state, PageItem* textNode)
 void SlaOutputDev::updateTextPos(GfxState* state)
 {	
 	QPointF newPosition = QPointF(state->getCurX(), state->getCurY());
-	TextRegion* activeTextRegion = &m_textFramework->activeTextRegion;
+	TextRegion* activeTextRegion = &m_textFramework.activeTextRegion;
 
 	if ((activeTextRegion->isNew())
 	)
 	{
 		activeTextRegion->textRegioBasenOrigin = newPosition;
-		m_textFramework->setCharMode(TextFramework::AddCharMode::ADDFIRSTCHAR);
+		m_textFramework.setCharMode(TextFramework::AddCharMode::ADDFIRSTCHAR);
 	}
 	else
 	{
 		// if we've will move to a new line or new text region then update the current text region with the last glyph, this ensures all textlines and textregions have terminating glyphs.
-		if (m_textFramework->isNewLineOrRegion(newPosition))
+		if (m_textFramework.isNewLineOrRegion(newPosition))
 		{
 			QPointF glyphPosition = activeTextRegion->lastXY;
 			activeTextRegion->lastXY.setX(activeTextRegion->lastXY.x() - activeTextRegion->glyphs.back().dx);
@@ -4348,7 +4353,9 @@ void SlaOutputDev::updateTextPos(GfxState* state)
 			}
 			else
 			{
-				qDebug() << "Nedwline should be next";
+#ifdef DEBUG_TEXT_IMPORT
+				qDebug() << "Newline should be next";
+#endif
 			};
 		}
 	}
@@ -4359,7 +4366,7 @@ void SlaOutputDev::updateTextPos(GfxState* state)
 		renderTextFrame();
 
 		//Create and initilize a new TextRegion
-		m_textFramework->addNewTextRegion();
+		m_textFramework.addNewTextRegion();
 		updateTextPos(state);
 	}
 }
@@ -4369,7 +4376,7 @@ void SlaOutputDev::renderTextFrame()
 	//TODO: Implement, this should all in  based the framework 
 	//qDebug() << "_flushText()    m_doc->currentPage()->xOffset():" << m_doc->currentPage()->xOffset();
 	// Ignore empty strings
-	TextRegion* activeTextRegion = &m_textFramework->activeTextRegion;
+	auto activeTextRegion = &m_textFramework.activeTextRegion;
 	if (activeTextRegion->glyphs.empty())
 	{
 		// We don't clear the glyphs any more or at least until the whole page has been rendred glyphs.clear();
@@ -4390,8 +4397,10 @@ void SlaOutputDev::renderTextFrame()
 	//FIXME: Use the framework for positioning not the first glyph
 	qreal xCoor = m_doc->currentPage()->xOffset() + activeTextRegion->textRegioBasenOrigin.x();
 	qreal yCoor = m_doc->currentPage()->initialHeight() - (m_doc->currentPage()->yOffset() + (double)activeTextRegion->textRegioBasenOrigin.y() + activeTextRegion->lineSpacing); // don't know if y is top down or bottom up
-	double  lineWidth = 0.0;
+	qreal  lineWidth = 0.0;
+#ifdef DEBUG_TEXT_IMPORT
 	qDebug() << "rendering new frame at:" << xCoor << "," << yCoor << " With lineheight of: " << activeTextRegion->lineSpacing << "Height:" << activeTextRegion->maxHeight << " Width:" << activeTextRegion->maxWidth;
+#endif
 	/* colours don't get reset to CommonStrings::None often enough.*/
 	int z = m_doc->itemAdd(PageItem::TextFrame, PageItem::Rectangle, xCoor, yCoor, 40, 40, 0, CommonStrings::None, CommonStrings::None /* this->CurrColorStroke*/);//, PageItem::ItemKind::InlineItem);
 	PageItem* textNode = m_doc->Items->at(z);
@@ -4440,7 +4449,7 @@ void SlaOutputDev::renderTextFrame()
 	//QString CurrColorText = getColor(state->getFillColorSpace(), state->getFillColor(), &shade);
 	//TODO: replace this with the framework
 	//applyTextStyleToCharStyle(pStyle.charStyle(), _glyphs[0].style->getFont().family(), CurrColorText, _glyphs[0].style->getFont().pointSizeF());// *_font_scaling);	
-	CharStyle& cStyle = (CharStyle&)pStyle.charStyle();
+	CharStyle& cStyle = static_cast<CharStyle&>(pStyle.charStyle());
 	cStyle.setScaleH(1000.0);
 	cStyle.setScaleV(1000.0);
 	cStyle.setHyphenChar(SpecialChars::BLANK.unicode());
@@ -4529,7 +4538,7 @@ void TextFramework::addNewTextRegion()
 
 void TextFramework::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
-	(this->*(addChar))(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
+	(this->*(m_addChar))(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
 }
 
 bool TextFramework::isNewLineOrRegion(QPointF newPosition)
@@ -4543,7 +4552,8 @@ bool TextFramework::isNewLineOrRegion(QPointF newPosition)
 PdfGlyph TextFramework::AddFirstChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
 	//qDebug() << "AddFirstChar() '" << u << " : " << uLen;	
-	auto newGlyph = TextFramework::AddCharCommon(state, x, y, dx, dy, u, uLen);
+	PdfGlyph newGlyph = TextFramework::AddCharCommon(state, x, y, dx, dy, u, uLen);
+	activeTextRegion.glyphs.push_back(newGlyph);
 	setCharMode(AddCharMode::ADDBASICCHAR);
 
 	//only need to be called for the very first point
@@ -4551,6 +4561,7 @@ PdfGlyph TextFramework::AddFirstChar(GfxState* state, double x, double y, double
 	{
 		qDebug("FIXME: Rogue glyph detected, this should never happen because the coursor should move before glyphs in new regions are added.");
 	}
+	return newGlyph;
 }
 PdfGlyph TextFramework::AddCharCommon(GfxState* state, double x, double y, double dx, double dy, Unicode const* u, int uLen)
 {
@@ -4571,7 +4582,7 @@ PdfGlyph TextFramework::AddCharCommon(GfxState* state, double x, double y, doubl
 
 PdfGlyph TextFramework::AddBasicChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
 {
-	auto newGlyph = AddCharCommon(state, x, y, dx, dy, u, uLen);
+	PdfGlyph newGlyph = AddCharCommon(state, x, y, dx, dy, u, uLen);
 	activeTextRegion.lastXY = QPointF(x, y);
 	activeTextRegion.glyphs.push_back(newGlyph);
 	return newGlyph;

@@ -170,7 +170,7 @@ struct PdfGlyph
 class TextRegionLine
 {
 public:
-	qreal maxHeight = ;
+	qreal maxHeight = {};
 	//we can probably use maxHeight for this.	
 	qreal width = {};
 	int glyphIndex = {};
@@ -239,20 +239,20 @@ public:
 			switch (mode)
 			{
 			case AddCharMode::ADDFIRSTCHAR:
-				addCharModal = AddFirstChar;;
+				addCharModal = &TextFramework::AddFirstChar;
 				break;
 			case AddCharMode::ADDBASICCHAR:
-				addCharModal = AddBasicChar;
+				addCharModal = &TextFramework::AddBasicChar;
 				break;
 			case AddCharMode::ADDCHARWITHNEWSTYLE:
-				addCharModal = AddCharWithNewStyle;
+				addCharModal = &TextFramework::AddCharWithNewStyle;
 				break;
 			case AddCharMode::ADDCHARWITHPREVIOUSSTYLE:
-				addCharModal = AddCharWithPreviousStyle;
+				addCharModal = &TextFramework::AddCharWithPreviousStyle;
 				break;
 			default:
 				// FIXME: This should never happen, set to a default
-				addCharModal = AddBasicChar;
+				addCharModal = &TextFramework::AddBasicChar;
 			}
 			addCharModes[mode] = addCharModal;
 		}
@@ -503,7 +503,7 @@ private:
 	QHash<int, PageItem*> m_radioButtons;
 	int m_actPage;
 	//PDF Textbox framework
-	TextFramework* m_textFramework = nullptr;
+	TextFramework m_textFramework = {};
 };
 
 #endif
