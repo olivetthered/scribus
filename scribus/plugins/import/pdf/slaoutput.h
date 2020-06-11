@@ -158,7 +158,7 @@ private:
 * Holds all the dtails for each glyph in the text imported from the pdf file.
 *
 */
-struct PdfGlyph
+struct PdfGlyph 
 {
 	double dx;  // X advance value
 	double dy;  // Y advance value
@@ -171,7 +171,7 @@ class TextRegionLine
 {
 public:
 	qreal maxHeight = 0;
-	//we can probably use maxHeight for this.
+	//we can probably use maxHeight for this.	
 	qreal width = 0;
 	int glyphIndex = 0;
 	QPointF baseOrigin = QPointF(0, 0);
@@ -182,7 +182,7 @@ public:
 class TextRegion
 {
 public:
-	enum class FrameworkLineTests
+	enum class FrameworkLineTests 
 	{
 		FIRSTPOINT,
 		SAMELINE,
@@ -210,23 +210,18 @@ public:
 	TextRegion::FrameworkLineTests isRegionConcurrent(QPointF newPoint);
 	TextRegion::FrameworkLineTests moveToPoint(QPointF newPoint);
 	TextRegion::FrameworkLineTests addGlyphAtPoint(QPointF newGlyphPoint, PdfGlyph new_glyph);
-	void renderToTextFrame(PageItem* textNode, ParagraphStyle& pStyle);
+	void renderToTextFrame(PageItem* textNode, ParagraphStyle& pStyle);	
 	std::vector<PdfGlyph> glyphs;
 	bool isNew();
 };
 
-class AddCharInterface
-{
-public:
-	// Pure Virtual Function
-	virtual void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) = 0;
-};
 
 class TextFramework
 {
 public:
 	TextFramework();
 	~TextFramework();
+
 	enum class AddCharMode
 	{
 		ADDFIRSTCHAR,
@@ -234,13 +229,50 @@ public:
 		ADDCHARWITHNEWSTYLE,
 		ADDCHARWITHPREVIOUSSTYLE
 	};
-	std::map<AddCharMode, AddCharInterface*> addCharModes;
+
+	void setCharMode(AddCharMode mode)
+	{
+		auto addCharModal = addCharModes[mode];
+		if (!addCharModal)
+		{
+			addCharModal = nullptr;
+			switch (mode)
+			{
+			case AddCharMode::ADDFIRSTCHAR:
+				addCharModal = AddFirstChar;;
+				break;
+			case AddCharMode::ADDBASICCHAR:
+				addCharModal = AddBasicChar;
+				break;
+			case AddCharMode::ADDCHARWITHNEWSTYLE:
+				addCharModal = AddCharWithNewStyle;
+				break;
+			case AddCharMode::ADDCHARWITHPREVIOUSSTYLE:
+				addCharModal = AddCharWithPreviousStyle;
+				break;
+			default:
+				// FIXME: This should never happen, set to a default
+				addCharModal = AddBasicChar;
+			}
+			addCharModes[mode] = addCharModal;
+		}
+		addChar = addCharModal;
+	}
+
+	//AddCharInterface* createChar(AddCharMode::ADDFIRSTCHAR);
+	//AddCharInterface* createChar(AddCharMode::ADDBASICCHAR)
+
+	std::map<AddCharMode, PdfGlyph(TextFramework::*)(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)> addCharModes;
 	TextRegion& activeTextRegion = TextRegion(); //faster than calling back on the vector all the time.
 	void addNewTextRegion();
-	AddCharInterface* addChar = nullptr;
+	PdfGlyph(TextFramework::* addChar)(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) = {};
 	bool isNewLineOrRegion(QPointF newPosition);
 private:
 	std::vector<TextRegion> m_textRegions = std::vector<TextRegion>();
+	PdfGlyph AddFirstChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
+	PdfGlyph AddBasicChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
+	PdfGlyph AddCharWithNewStyle(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
+	PdfGlyph AddCharWithPreviousStyle(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
 };
 
 class SlaOutputDev : public OutputDev
@@ -321,7 +353,7 @@ public:
 	void endMarkedContent(GfxState *state) override;
 	void markPoint(POPPLER_CONST char *name) override;
 	void markPoint(POPPLER_CONST char *name, Dict *properties) override;
-
+	
 
 	//----- image drawing
 	void drawImageMask(GfxState *state, Object *ref, Stream *str, int width, int height, GBool invert, GBool interpolate, GBool inlineImg) override;
@@ -397,7 +429,7 @@ private:
 
 	void createImageFrame(QImage& image, GfxState *state, int numColorComponents);
 
-	//PDF Textbox framework
+	//PDF Textbox framework	
 	void setFillAndStrokeForPDF(GfxState* state, PageItem* text_node);
 	void updateTextPos(GfxState* state) override;
 	void renderTextFrame();
@@ -470,56 +502,6 @@ private:
 	QHash<int, PageItem*> m_radioButtons;
 	int m_actPage;
 	//PDF Textbox framework
-	TextFramework* m_textFramework = nullptr;
-};
-
-class AddFirstChar : public AddCharInterface
-{
-public:
-	AddFirstChar(TextFramework* textFramework)
-	{
-		m_textFramework = textFramework;
-	}
-	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
-private:
-	TextFramework* m_textFramework = nullptr;
-};
-
-class AddBasicChar : public AddCharInterface
-{
-public:
-	AddBasicChar(TextFramework* textFramework)
-	{
-		m_textFramework = textFramework;
-	}
-	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
-private:
-	TextFramework* m_textFramework = nullptr;
-};
-
-// TODO: implement these addchar definitions so that they can handle changes in style, font, text micro positioning, scaling, matrix etc...
-class AddCharWithNewStyle : public AddCharInterface
-{
-public:
-	AddCharWithNewStyle(TextFramework* textFramework)
-	{
-		m_textFramework = textFramework;
-	}
-	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
-private:
-	TextFramework* m_textFramework = nullptr;
-};
-
-// TODO: implement these addchar definitions so that they can handle changes in style, font, text micro positioning, scaling, matrix etc...
-class AddCharWithPreviousStyle : public AddCharInterface
-{
-public:
-	AddCharWithPreviousStyle(TextFramework* textFramework)
-	{
-		m_textFramework = textFramework;
-	}
-	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) override;
-private:
 	TextFramework* m_textFramework = nullptr;
 };
 
