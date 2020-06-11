@@ -3365,7 +3365,7 @@ void SlaOutputDev::drawChar(GfxState* state, double x, double y, double dx, doub
 			}
 		}
 		if (!importTextAsVectors) { // donm't render the char as vectors add it to an array so it can be rendred as a string			
-			(m_textFramework ->*(m_textFramework->addChar))(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
+			m_textFramework->addChar(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
 		}
 	}
 }
@@ -4525,6 +4525,11 @@ void TextFramework::addNewTextRegion()
 	activeTextRegion = TextRegion();
 	m_textRegions.push_back(activeTextRegion);
 	setCharMode(TextFramework::AddCharMode::ADDFIRSTCHAR);
+}
+
+void TextFramework::addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)
+{
+	(this->*(addChar))(state, x, y, dx, dy, originX, originY, code, nBytes, u, uLen);
 }
 
 bool TextFramework::isNewLineOrRegion(QPointF newPosition)

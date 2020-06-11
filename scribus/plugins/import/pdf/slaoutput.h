@@ -170,11 +170,11 @@ struct PdfGlyph
 class TextRegionLine
 {
 public:
-	qreal maxHeight = 0;
+	qreal maxHeight = ;
 	//we can probably use maxHeight for this.	
-	qreal width = 0;
-	int glyphIndex = 0;
-	QPointF baseOrigin = QPointF(0, 0);
+	qreal width = {};
+	int glyphIndex = {};
+	QPointF baseOrigin = QPointF({}, {});
 	std::vector<TextRegionLine> segments = std::vector<TextRegionLine>();
 
 };
@@ -194,13 +194,13 @@ public:
 		FAIL
 	};
 
-	QPointF textRegioBasenOrigin = QPointF(0, 0);
-	qreal maxHeight = 0;
-	qreal lineSpacing = 1;
+	QPointF textRegioBasenOrigin = QPointF({}, {});
+	qreal maxHeight = {};
+	qreal lineSpacing = { 1 };
 	std::vector<TextRegionLine> textRegionLines = std::vector<TextRegionLine>();
-	qreal maxWidth = 0;
-	QPointF lineBaseXY = QPointF(0, 0); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
-	QPointF lastXY = QPointF(0, 0);
+	qreal maxWidth = {};
+	QPointF lineBaseXY = QPointF({ }, { }); //updated with the best match left value from all the textRegionLines and the best bottom value from the textRegionLines.segments;
+	QPointF lastXY = QPointF({}, {});
 	static bool coLinera(qreal a, qreal b);
 	bool closeToX(qreal x1, qreal x2);
 	bool closeToY(qreal y1, qreal y2);
@@ -256,18 +256,18 @@ public:
 			}
 			addCharModes[mode] = addCharModal;
 		}
-		addChar = addCharModal;
+		m_addChar = addCharModal;
 	}
 
-	//AddCharInterface* createChar(AddCharMode::ADDFIRSTCHAR);
-	//AddCharInterface* createChar(AddCharMode::ADDBASICCHAR)
+
 
 	std::map<AddCharMode, PdfGlyph(TextFramework::*)(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen)> addCharModes;
 	TextRegion& activeTextRegion = TextRegion(); //faster than calling back on the vector all the time.
 	void addNewTextRegion();
-	PdfGlyph(TextFramework::* addChar)(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) = {};
+	void addChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
 	bool isNewLineOrRegion(QPointF newPosition);
 private:
+	PdfGlyph(TextFramework::* m_addChar)(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen) = {};
 	std::vector<TextRegion> m_textRegions = std::vector<TextRegion>();
 	PdfGlyph AddCharCommon(GfxState* state, double x, double y, double dx, double dy, Unicode const* u, int uLen);
 	PdfGlyph AddFirstChar(GfxState* state, double x, double y, double dx, double dy, double originX, double originY, CharCode code, int nBytes, Unicode const* u, int uLen);
